@@ -75,12 +75,12 @@ To resolve these challenges, we introduce \textbf{V2X-BERT}:
 \section{Standards-Informed V2X Tokenizer Design}
 
 \subsection{SAE J2735 \& ETSI Grammar Unification}
-Let $\mathcal{M}$ denote a multi-message vehicular dialogue frame comprising messages from heterogeneous sources:
+In standardized C-V2X and DSRC protocol stacks, over-the-air binary frames are transmitted using Abstract Syntax Notation One (ASN.1) Unaligned Packed Encoding Rules (UPER) or Basic Encoding Rules (BER). Following standard automotive stack decoding into structured Protocol Data Units (PDUs), let $\mathcal{M}$ denote a multi-message vehicular dialogue frame comprising decoded messages from heterogeneous sources:
 \begin{equation}
 \mathcal{M} = \{ m_{\text{BSM}}^{(1)}, \dots, m_{\text{BSM}}^{(K)}, m_{\text{SPaT}}, m_{\text{DENM}}, m_{\text{PSM}} \}
 \end{equation}
 
-Our Schema-Aware Tokenizer translates structured message frames into discrete semantic tokens within a unified dictionary $|\mathcal{V}| = 1,024$:
+Our Schema-Aware Tokenizer translates these decoded ASN.1 message fields into discrete semantic tokens within a unified dictionary $|\mathcal{V}| = 1,024$:
 \begin{enumerate}
     \item \textbf{Special \& Message Headers ($[0, 31]$):} $[PAD]=0, [UNK]=1, [CLS]=2, [SEP]=3, [MASK]=4, [BSM]=5, [CAM]=6, [SPAT]=7, [DENM]=9, [PSM]=10$.
     \item \textbf{Quantized Kinematics ($[32, 327]$):} Velocity bins $v \in [0, 180]\,\text{km/h}$ (96 bins), linear acceleration bins $a \in [-12, +8]\,\text{m/s}^2$ (128 bins), and heading $\theta \in [0, 360^\circ)$ (72 bins).

@@ -155,16 +155,17 @@ class V2XTokenizer:
         cause_token = self.DENM_CAUSES.get(cause_code, self.DENM_CAUSES["ROAD_HAZARD"])
         return [self.DENM_TOKEN, cause_token, self.tokenize_speed(speed), self.tokenize_heading(heading)]
 
-    def encode_standard_dict(self, msg_dict: dict) -> list:
+    def decode_asn1_payload(self, msg_dict: dict) -> list:
         """
-        Encodes a standard ASN.1-derived dictionary payload into tokens.
+        Translates a decoded ASN.1 UPER/BER Protocol Data Unit (PDU) payload into tokens.
+        Accepts decoded dictionary structures adhering to SAE J2735 / ETSI EN 302 637-2 schemas.
         Supports:
           - SAE J2735 BSM: {'messageId': 'BSM', 'speed': float, 'accel': float, 'heading': float, 'dx': float, 'dy': float, 'brake': int, 'abs': int}
           - ETSI CAM:      {'messageId': 'CAM', 'speed': float, 'accel': float, 'heading': float, 'dx': float, 'dy': float, 'light': int}
           - SAE SPaT:     {'messageId': 'SPAT', 'phase': str, 'countdown': float}
           - ETSI DENM:     {'messageId': 'DENM', 'cause': str, 'speed': float, 'heading': float}
         """
-        msg_type = str(msg_dict.get("messageId", "BSM")).upper()
+        msg_type = str(msg_dict.get("messageId", msg_dict.get("message_id", "BSM"))).upper()
 
         if msg_type == "BSM":
             return self.encode_bsm(
@@ -198,6 +199,10 @@ class V2XTokenizer:
             )
         else:
             return [self.UNK_TOKEN]
+
+    def encode_standard_dict(self, msg_dict: dict) -> list:
+        """Alias for decode_asn1_payload."""
+        return self.decode_asn1_payload(msg_dict)
 
     def encode_sequence(self, message_token_lists: list, max_len: int = 64):
         """
