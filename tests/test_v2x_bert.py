@@ -134,6 +134,23 @@ class TestV2XBERT(unittest.TestCase):
         loss = compute_sae_etsi_contrastive_loss(z_sae, z_etsi)
         self.assertTrue(loss.item() > 0.0)
 
+    def test_true_scenario_and_vehicle_disjoint_split(self):
+        from v2x_bert.data import load_veremi_standards_dataset, verify_disjoint_split
+        train_ds, test_ds = load_veremi_standards_dataset(max_samples=500)
+
+        # 1. Zero scenario overlap
+        train_scenarios = set(train_ds.scenario_ids)
+        test_scenarios = set(test_ds.scenario_ids)
+        self.assertEqual(len(train_scenarios.intersection(test_scenarios)), 0)
+
+        # 2. Zero vehicle overlap
+        train_vehicles = set(train_ds.vehicle_ids)
+        test_vehicles = set(test_ds.vehicle_ids)
+        self.assertEqual(len(train_vehicles.intersection(test_vehicles)), 0)
+
+        # 3. Assert verify_disjoint_split passes without exception
+        verify_disjoint_split(train_ds, test_ds)
+
     def test_int8_quantization(self):
         model = load_model(pretrained=False, device="cpu")
         quant_model = model.quantize_int8()
