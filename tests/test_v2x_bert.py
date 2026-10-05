@@ -147,6 +147,13 @@ class TestV2XBERT(unittest.TestCase):
         self.assertEqual(len(set(train_sn.sender_ids).intersection(set(test_sn.sender_ids))), 0)
         verify_sender_disjoint_split(train_sn, test_sn)
 
+    def test_dair_v2x_loader(self):
+        from v2x_bert.dair_v2x import load_dair_v2x_dataset
+        train_ds, test_ds = load_dair_v2x_dataset(num_samples=200, test_ratio=0.20)
+        self.assertEqual(len(train_ds), 160)
+        self.assertEqual(len(test_ds), 40)
+        self.assertEqual(train_ds[0][0].shape[0], 64)
+
     def test_int8_quantization(self):
         model = load_model(pretrained=False, device="cpu")
         quant_model = model.quantize_int8()

@@ -1,0 +1,4 @@
+Experiment,Model,Precision,Accuracy (%),Precision (%),Recall (%),F1-Score (%),AUC-ROC,Mean Latency (us)
+DAIR-V2X (VIC+RSU Fusion),V2X-BERT (Pre-trained),FP32 (4.22 MB),69.00,69.09,73.08,71.03,0.7608,959.03
+DAIR-V2X (VIC+RSU Fusion),V2X-BERT (INT8 Quantized),INT8 (1.06 MB),71.00,70.91,75.00,72.90,0.7612,853.21
+DAIR-V2X (VIC+RSU Fusion),V2X-BERT (No Pre-train),FP32 (4.22 MB),52.00,52.00,100.00,68.42,0.7019,1740.97
