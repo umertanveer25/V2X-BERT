@@ -114,6 +114,26 @@ class TestV2XBERT(unittest.TestCase):
         self.assertEqual(len(denm_tokens), 4)
         self.assertEqual(denm_tokens[0], tokenizer.DENM_TOKEN)
 
+    def test_sae_etsi_cross_standard_alignment_loss(self):
+        from v2x_bert.pretrain import compute_sae_etsi_contrastive_loss, map_sae_to_etsi_view
+        tokenizer = V2XTokenizer()
+
+        # Batch of SAE J2735 sequences
+        sae_batch = torch.tensor([
+            [tokenizer.CLS_TOKEN, tokenizer.BSM_TOKEN, 50, 150, 260, 510, 328, tokenizer.SEP_TOKEN] + [0] * 56,
+            [tokenizer.CLS_TOKEN, tokenizer.BSM_TOKEN, 80, 180, 290, 550, 329, tokenizer.SEP_TOKEN] + [0] * 56
+        ])
+
+        # Map to ETSI CAM equivalent
+        etsi_batch = map_sae_to_etsi_view(sae_batch, tokenizer)
+        self.assertEqual(etsi_batch[0, 1].item(), tokenizer.CAM_TOKEN)
+
+        # Projections
+        z_sae = torch.randn(2, 64)
+        z_etsi = torch.randn(2, 64)
+        loss = compute_sae_etsi_contrastive_loss(z_sae, z_etsi)
+        self.assertTrue(loss.item() > 0.0)
+
     def test_int8_quantization(self):
         model = load_model(pretrained=False, device="cpu")
         quant_model = model.quantize_int8()
