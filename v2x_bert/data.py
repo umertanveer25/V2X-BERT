@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
-from .v2x_tokenizer import V2XTokenizer
+from .tokenizer import V2XTokenizer
 
 
 class V2XDataset(Dataset):

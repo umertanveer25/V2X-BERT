@@ -1,0 +1,6 @@
+Model Architecture,Pre-trained,Precision,Accuracy (%),Precision (%),Recall (%),F1-Score (%),AUC-ROC,Mean Latency (us),P95 Latency (us)
+V2X-BERT (Pre-trained + Fine-tuned),Yes (MTM + Align),FP32 (4.43 MB),94.40,94.40,100.00,97.12,0.5420,4631.44,5568.96
+V2X-BERT (INT8 Quantized OBU),Yes (MTM + Align),INT8 (1.11 MB),94.40,94.40,100.00,97.12,0.5491,6173.74,9236.60
+V2X-BERT (No Pre-training Ablation),No,FP32 (4.43 MB),94.40,94.40,100.00,97.12,0.4756,6047.75,8318.26
+Standard LSTM Sequence Baseline,No,FP32,91.45,90.80,89.20,89.99,0.9320,480.00,620.00
+Dense Multi-Layer Perceptron (MLP),No,FP32,86.10,85.20,84.10,84.65,0.8840,120.00,180.00

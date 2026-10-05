@@ -9,8 +9,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from .v2x_tokenizer import V2XTokenizer
-from .v2x_bert_model import EdgeV2XBERT
+from .tokenizer import V2XTokenizer
+from .model import EdgeV2XBERT
 
 
 def mask_telemetry_tokens(input_ids, tokenizer, mask_prob=0.15):

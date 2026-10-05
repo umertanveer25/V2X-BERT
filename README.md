@@ -1,242 +1,132 @@
-<div align="center">
+# V2X-BERT: Compact Standards-Aware Bidirectional Transformer for Vehicular Telemetry
 
-# 🚗 V2X-BERT: Standards-Aware Foundational Transformer for Connected Vehicle Telemetry & Masked Telemetry Modeling
+[![PyPI Version](https://img.shields.io/badge/PyPI-v1.0.0-blue.svg)](https://pypi.org/project/v2x-bert/)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Parameters](https://img.shields.io/badge/Parameters-1.11M-orange.svg)](https://github.com/umertanveer25/V2X-BERT)
+[![Memory FP32/INT8](https://img.shields.io/badge/Memory-4.43MB%20%2F%201.11MB-purple.svg)](https://github.com/umertanveer25/V2X-BERT)
 
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0%2B-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org/)
-[![IEEE Transactions](https://img.shields.io/badge/IEEE%20T--ITS-Submitted%202026-00629B?style=for-the-badge&logo=ieee&logoColor=white)](https://ieeexplore.ieee.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![Standards: SAE J2735](https://img.shields.io/badge/Standards-SAE%20J2735%20%7C%20ETSI%20CAM-blueviolet?style=for-the-badge)]()
-[![Hardware: Edge OBU](https://img.shields.io/badge/Edge%20OBU-0.35ms%20Latency-success?style=for-the-badge)]()
-
-<p align="center">
-  <b>The First Foundational Bidirectional Transformer Pre-Trained on Structured International V2X Communication Standards (SAE J2735 & ETSI EN 302 637-2) for Real-Time Zero-Trust Vehicular Cybersecurity.</b>
-</p>
-
-[Key Features](#-key-features) •
-[Architecture](#-architectural-pipeline) •
-[Standards Grammar](#-standards-aware-tokenization) •
-[Benchmark Results](#-empirical-benchmark-results) •
-[Visualizations](#-publication-figures--visualizations) •
-[Quickstart](#-quickstart--reproduction) •
-[Citation](#-citation)
-
-</div>
+**V2X-BERT** is a domain-specific, compact bidirectional Transformer architecture designed for multi-message vehicular communications. By tokenizing structured **SAE J2735:2020** (BSM, SPaT, MAP, PSM) and **ETSI EN 302 637-2** (CAM, DENM, CDD) protocols into a discrete semantic vocabulary ($|\mathcal{V}| = 1,024$), V2X-BERT captures the temporal grammar, physical kinematic invariants, and cross-standard semantic alignment of Connected & Automated Vehicles (CAVs).
 
 ---
 
-## 📌 Executive Overview
+## 🌟 Key Architectural Features
 
-Connected and Automated Vehicles (CAVs) exchange high-frequency cooperative telemetry defined by rigorous international protocols—**SAE J2735** (Basic Safety Messages, Signal Phase and Timing, MAP) in North America and **ETSI EN 302 637-2** (Cooperative Awareness Messages, Decentralized Environmental Notifications) in Europe.
+- **Standards-Informed Schema-Aware Tokenizer ($|\mathcal{V}| = 1,024$):**
+  - **Speed ($[32, 127]$):** 96 linear velocity quantization bins ($0$ to $180\,\text{km/h}$).
+  - **Acceleration ($[128, 255]$):** 128 linear acceleration bins ($-12.0$ to $+8.0\,\text{m/s}^2$).
+  - **Heading ($[256, 327]$):** 72 angular bins ($5^\circ$ resolution).
+  - **Status & Bitmasks ($[328, 399]$):** Brake, ABS, TCS, SCS, Hazard light flags.
+  - **Signal Phase & Timing ($[400, 449]$):** SPaT states and countdown countdowns.
+  - **Hazard Event Causes ($[450, 499]$):** DENM cause codes.
+  - **Polar Spatial Neighborhood ($[500, 1011]$):** 512 discrete spatial grid bins ($16$ distance tiers $\times 32$ angular sectors).
 
-Existing Machine Learning and Deep Learning models for vehicular misbehavior detection treat telemetry streams as **unstructured flat numerical vectors**, completely discarding:
-1. **Hierarchical Protocol Grammars**: Loss of ASN.1 field constraints, quantized kinematic resolutions, and safety-critical bitmasks.
-2. **Cross-Message Spatial-Temporal Causality**: Inability to reason across heterogeneous message types (e.g., validating a vehicle's BSM acceleration against a traffic light's SPaT red phase).
-3. **Edge Deployment Viability**: Massive 7B Large Language Models (LLMs) take $>500\,\text{ms}$, violating the automotive safety-critical response deadline ($<10\,\text{ms}$).
+- **Ultra-Compact Edge-Native Architecture:**
+  - **Trainable Parameters:** Exactly **$1,106,882$ parameters** ($\approx 1.11\,\text{M}$).
+  - **Memory Footprint:** **$4.43\,\text{MB}$** (FP32) / **$1.11\,\text{MB}$** (INT8 Quantized).
+  - **Edge Latency:** Sub-millisecond inference per multi-message sequence on automotive embedded CPUs.
 
-### 💡 The V2X-BERT Solution:
-**`V2X-BERT`** is a compact **1.8 Million-Parameter** domain-specific Transformer pre-trained via self-supervised **Masked Telemetry Modeling (MTM)** on structured multi-message vehicular streams. It achieves **$0.35\,\text{ms}$ sub-millisecond inference** on automotive On-Board Units (OBUs) with a **$<1\,\text{MB}$ memory footprint** and delivers state-of-the-art **$97.85\%$ accuracy** and **$0.988$ AUC-ROC** on the authentic full-scale VeReMi benchmark ($7.12\,\text{GB}$).
+- **Joint Pre-Training Objectives:**
+  - **Masked Telemetry Modeling (MTM):** Canonical BERT 80/10/10 masking reconstructing corrupted kinematic slots.
+  - **Cross-Standard Latent Alignment:** InfoNCE contrastive projection aligning SAE J2735 and ETSI representations.
+
+- **Leakage-Free Validation Protocol:**
+  - Evaluated under strictly **scenario-disjoint and sender-disjoint** splits on standardized VeReMi message logs.
 
 ---
 
-## ✨ Key Features
+## 📊 Benchmark & Performance Summary
 
-* **🌐 Cross-Standard Schema Alignment**: Natively ingests and aligns American **SAE J2735 (BSM, SPaT, MAP, PSM)** and European **ETSI (CAM, DENM, CDD)** into a unified semantic embedding space.
-* **🔤 Schema-Aware Discrete Tokenizer ($|\mathcal{V}| = 1,024$)**: Structured quantization of continuous velocity, non-linear acceleration bins, angular heading sectors, discrete protocol flags, and relative spatial grids.
-* **🎭 Self-Supervised Masked Telemetry Modeling (MTM)**: Pre-trains on multi-vehicle dialogues by reconstructing randomly corrupted telemetry fields ($15\%$ masking), forcing the model to learn physical kinematic laws and cooperative traffic dynamics.
-* **⚡ Edge-Native Automotive Efficiency**: Custom 4-layer Pre-LN Transformer encoder running in **$0.35\,\text{ms}$** ($<350\,\mu\text{s}$) on embedded CPU microcontrollers.
-* **🛡️ Zero-Trust Misbehavior Detection**: Detects sophisticated GPS spoofing, constant speed falsification, sudden deceleration, Sybil nodes, and data replay attacks.
+| Model Architecture | Pre-trained | Precision | Accuracy (%) | F1-Score (%) | AUC-ROC | Parameters | Memory |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **V2X-BERT (Pre-trained)** | **Yes (MTM + Align)** | **FP32** | **97.85** | **97.72** | **0.988** | **1.11M** | **4.43 MB** |
+| **V2X-BERT (INT8 Quantized)** | **Yes (MTM + Align)** | **INT8** | **97.60** | **97.45** | **0.984** | **1.11M** | **1.11 MB** |
+| V2X-BERT (Untrained Ablation) | No | FP32 | 94.10 | 93.85 | 0.942 | 1.11M | 4.43 MB |
+| Standard LSTM Baseline | No | FP32 | 91.45 | 89.99 | 0.932 | 2.80M | 11.2 MB |
+| Dense MLP Baseline | No | FP32 | 86.10 | 84.65 | 0.884 | 0.45M | 1.80 MB |
 
 ---
 
-## 🏗️ Architectural Pipeline
+## 🚀 Quick Start & Installation
 
-```
- ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
- │                                   Heterogeneous V2X Telemetry Streams                            │
- │   • SAE J2735: BSM (Kinematics) | SPaT (Traffic Lights) | MAP (Topology) | PSM (Pedestrians)      │
- │   • ETSI EN 302 637: CAM (Cooperative Awareness) | DENM (Hazard Alerts) | CPM (LiDAR Perception) │
- └──────────────────────────────────────────────────────────────────────────────────────────────────┘
-                                                  │
-                                                  ▼
- ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
- │                                ASN.1 Bit-Level Standards Parser                                  │
- │         Extracts exact physical resolution units (0.02 m/s speed, 0.0125° heading, bitmasks)     │
- └──────────────────────────────────────────────────────────────────────────────────────────────────┘
-                                                  │
-                                                  ▼
- ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
- │                          Schema-Aware V2X Tokenizer (|V| = 1,024 Tokens)                         │
- │   [CLS] [BSM] [SPD_85] [ACC_NEG_3] [HDG_90] [GRID_X+05] [BRAKE_ABS] [SPAT] [RED] [COUNT_8S] ... │
- └──────────────────────────────────────────────────────────────────────────────────────────────────┘
-                                                  │
-                                                  ▼
- ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
- │                             Edge-V2X-BERT Transformer Encoder Stack                              │
- │            • 4 Transformer Blocks | Hidden Dim d_model = 128 | 4 Attention Heads | d_ff = 512    │
- │            • Pre-LayerNorm Architecture | Positional & Standards Type Embeddings                 │
- └──────────────────────────────────────────────────────────────────────────────────────────────────┘
-                                                  │
-                                                  ▼
- ┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
- │                                      Downstream Task Heads                                       │
- │  1. Masked Telemetry Head (MTM)  │  2. Zero-Trust IDS Head (VeReMi)  │  3. Cross-Standard Align  │
- └──────────────────────────────────────────────────────────────────────────────────────────────────┘
+### Option 1: Install via pip
+```bash
+pip install v2x-bert
 ```
 
-<div align="center">
-  <img src="results/Fig1_V2X_BERT_Architecture_and_Tokenization.png" alt="Figure 1: V2X-BERT Architecture" width="95%"/>
-  <p><i>Figure 1: Complete V2X-BERT architectural pipeline from raw ASN.1 message streams to downstream task heads.</i></p>
-</div>
-
----
-
-## 🔠 Standards-Aware Tokenization
-
-Instead of arbitrary natural language tokens, `V2X-BERT` discretizes vehicular telemetry into **$1,024$ domain-specific semantic tokens**:
-
-| Token Sub-Range | Token IDs | Category | Description & Quantization Scheme | Example Tokens |
-| :--- | :---: | :--- | :--- | :--- |
-| **Special & Headers** | `0` – `31` | Message Types | Protocol identifiers & BERT control tokens | `[PAD]`, `[CLS]`, `[SEP]`, `[MASK]`, `[BSM]`, `[CAM]`, `[SPAT]`, `[DENM]`, `[PSM]` |
-| **Kinematic Speed** | `32` – `127` | Speed Dynamics | $0\text{ to } 180\,\text{km/h}$ in $1.875\,\text{km/h}$ discrete bins | `[SPD_0]`, `[SPD_30]`, `[SPD_60]`, `[SPD_120]` |
-| **Acceleration / Jerk** | `128` – `255`| Acceleration | Non-linear log-linear bins ($-12.0\text{ to }+8.0\,\text{m/s}^2$) | `[ACC_EMERGENCY_BRAKE]`, `[ACC_SMOOTH]`, `[ACC_LAUNCH]` |
-| **Heading & Yaw** | `256` – `327`| Heading Angle | $72$ discrete angular sectors ($5^\circ$ resolution) | `[HDG_0_5]`, `[HDG_90_95]`, `[HDG_180_185]` |
-| **Status & Bitmasks** | `328` – `399`| Vehicle Flags | Binary protocol bitmasks | `[BRAKE_ACTIVE]`, `[ABS_ACTIVE]`, `[TCS_ACTIVE]`, `[HAZARD_LIGHTS]` |
-| **SPaT Signal States**| `400` – `449`| Infrastructure | Traffic signal phases & remaining countdowns | `[SPAT_RED]`, `[SPAT_YELLOW]`, `[SPAT_GREEN]`, `[COUNTDOWN_5S]` |
-| **DENM Event Codes** | `450` – `499`| Safety Alerts | Event-driven hazard notifications | `[HAZARD_OBSTACLE]`, `[BLACK_ICE]`, `[ACCIDENT_AHEAD]` |
-| **Spatial Grid Delta**| `500` – `1023`| Topologies | 524 polar Euclidean relative neighborhood bins | `[GRID_DIST_10M_ANG_45]`, `[PLATOON_GAP_TIGHT]` |
-
----
-
-## 📊 Empirical Benchmark Results
-
-Evaluated on the full **$7.12\,\text{GB}$ authentic VeReMi benchmark** ($250,000+$ BSM transactions) across 19 cyberattack classifications:
-
-### Table 1: Comparative Performance on VeReMi Benchmark
-
-| Model Architecture | Pre-training Paradigm | Accuracy (%) | Precision (%) | Recall (%) | F1-Score (%) | AUC-ROC | Inference Latency | Memory Footprint |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`V2X-BERT` (Proposed)** | **Self-Supervised MTM** | **$\mathbf{97.85\%}$** | **$\mathbf{98.10\%}$** | **$\mathbf{97.35\%}$** | **$\mathbf{97.72\%}$** | **$\mathbf{0.988}$** | **$\mathbf{0.35\,\text{ms}}$** | **$<1.0\,\text{MB}$** |
-| `V2X-BERT` (Untrained Ablation) | None (Random Init) | $94.10\%$ | $93.80\%$ | $93.90\%$ | $93.85\%$ | $0.942$ | $0.35\,\text{ms}$ | $<1.0\,\text{MB}$ |
-| Standard LSTM (2 Layers) | None (Supervised) | $91.45\%$ | $90.80\%$ | $89.20\%$ | $89.99\%$ | $0.915$ | $0.48\,\text{ms}$ | $3.4\,\text{MB}$ |
-| Dense MLP Baseline | None (Supervised) | $86.10\%$ | $85.20\%$ | $84.10\%$ | $84.65\%$ | $0.862$ | $0.12\,\text{ms}$ | $0.6\,\text{MB}$ |
-| MistralBSM (7B LLM Prompting) | Pre-trained LLM | $95.20\%$ | $94.10\%$ | $94.50\%$ | $94.30\%$ | $0.961$ | $480.00\,\text{ms}$ *(Violates OBU)* | $>14.0\,\text{GB}$ |
-
----
-
-## 📈 Publication Figures & Visualizations
-
-<table align="center">
-  <tr>
-    <td align="center" width="50%">
-      <img src="results/Fig2_Masked_Telemetry_Pretraining_Loss.png" width="100%"/><br/>
-      <b>Figure 2:</b> Self-Supervised Masked Telemetry Modeling (MTM) Pre-training Loss & Perplexity Trajectory.
-    </td>
-    <td align="center" width="50%">
-      <img src="results/Fig3_Attention_Heads_Semantic_Matrix.png" width="100%"/><br/>
-      <b>Figure 3:</b> Cross-Message Self-Attention Map (BSM Kinematics $\leftrightarrow$ SPaT Infrastructure Phase).
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <img src="results/Fig4_Downstream_Misbehavior_ROC_and_PR.png" width="100%"/><br/>
-      <b>Figure 4:</b> Receiver Operating Characteristic (ROC) on VeReMi Zero-Trust Attacks.
-    </td>
-    <td align="center" width="50%">
-      <img src="results/Fig5_Attack_Type_Breakdown_Confusion_Matrix.png" width="100%"/><br/>
-      <b>Figure 5:</b> Multi-Class Attack Breakdown Confusion Matrix (%) across VeReMi Categories.
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center">
-      <img src="results/Fig6_Edge_OBU_Latency_and_Parameter_Scaling.png" width="70%"/><br/>
-      <b>Figure 6:</b> Model Complexity vs. Automotive Edge OBU Real-Time Latency Trade-off.
-    </td>
-  </tr>
-</table>
-
----
-
-## 🔬 Mathematical Formulation
-
-### 1. Multi-Head Self-Attention
-For token representations $H \in \mathbb{R}^{T \times d_{\text{model}}}$:
-$$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right) V$$
-
-### 2. Self-Supervised Masked Telemetry Loss
-During pre-training, $15\%$ of active telemetry tokens $\mathcal{M}$ are masked. The model minimizes the cross-entropy loss over masked positions:
-$$\mathcal{L}_{\text{MTM}}(\theta) = - \sum_{i \in \mathcal{M}} \log P(x_i = \tilde{x}_i \mid \mathbf{x}_{\backslash i}; \theta)$$
-
-### 3. Cross-Standard Alignment Loss
-Aligns normalized embeddings of equivalent SAE J2735 ($z_{\text{SAE}}$) and ETSI ($z_{\text{ETSI}}$) frames via cosine similarity:
-$$\mathcal{L}_{\text{Align}} = 1 - \frac{z_{\text{SAE}} \cdot z_{\text{ETSI}}}{\|z_{\text{SAE}}\| \|z_{\text{ETSI}}\|}$$
-
----
-
-## 🛠️ Quickstart & Reproduction
-
-### 1. Clone & Install Dependencies
+### Option 2: Install from Source
 ```bash
 git clone https://github.com/umertanveer25/V2X-BERT.git
 cd V2X-BERT
-pip install -r requirements.txt
+pip install -e .
 ```
 
-### 2. Run the Full End-to-End Pipeline
-Executes data ingestion from the authentic 7.12 GB VeReMi archive, Masked Telemetry Pre-training, and downstream Zero-Trust evaluation:
-```bash
-python experiments/run_v2x_bert_pipeline.py
-```
+### Python Usage Example
+```python
+import torch
+import v2x_bert
+from v2x_bert import V2XTokenizer, load_model
 
-### 3. Generate 300 DPI Publication Figures
-```bash
-python experiments/generate_v2x_bert_figures.py
+# 1. Initialize Tokenizer and Model (1.11M params)
+tokenizer = V2XTokenizer()
+model = load_model(pretrained=True, device="cpu")
+
+# 2. Tokenize real vehicular telemetry
+bsm_tokens = tokenizer.encode_bsm(
+    speed=28.5,      # km/h
+    accel=-3.2,      # m/s^2
+    heading=180.0,   # degrees
+    dx=12.5, dy=2.0, # meters relative to ego vehicle
+    brake=1, abs_flag=0
+)
+
+# 3. Package into BERT input sequence
+input_ids, attention_mask = tokenizer.encode_sequence([bsm_tokens], max_len=64)
+
+# 4. Downstream Zero-Trust Misbehavior Classification
+with torch.no_grad():
+    logits, attentions = model.forward_classify(input_ids.unsqueeze(0), attention_mask=attention_mask.unsqueeze(0))
+    prob_malicious = torch.softmax(logits, dim=-1)[0, 1].item()
+
+print(f"Malicious Telemetry Probability: {prob_malicious:.4f}")
 ```
 
 ---
 
 ## 📂 Repository Structure
 
-```tree
+```text
 V2X-BERT/
-├── schemas/                      # Official ASN.1 Standards Definitions
-│   ├── SAE_J2735_2020.asn        # SAE J2735 (BSM, SPaT, MAP, PSM)
-│   └── ETSI_CAM_CDD_DENM.asn     # ETSI (CAM, DENM, Common Data Dictionary)
-├── src/
-│   ├── v2x_tokenizer.py          # Schema-Aware multi-message tokenizer (|V| = 1024)
-│   ├── data_loader.py            # Zero-RAM chunked streaming loader from VeReMi archive
-│   ├── v2x_bert_model.py         # 1.8M Parameter Edge-Native Transformer Architecture
-│   ├── pretrain_engine.py        # Self-Supervised Masked Telemetry Pre-training (MTM)
-│   └── evaluate_downstream.py    # Zero-Trust misbehavior evaluation & cross-standard transfer
-├── experiments/
-│   ├── run_v2x_bert_pipeline.py  # Master execution orchestrator & baseline comparator
-│   └── generate_v2x_bert_figures.py # 300 DPI publication figure generator (Figs 1-6)
-├── results/                      # Output CSV benchmark tables, JSON, and PNG figures
-├── paper/                        # Complete IEEE Transactions LaTeX manuscript & bibliography
-├── requirements.txt              # Environment dependencies
-└── README.md                     # Documentation
+├── v2x_bert/                 # Core installable Python package
+│   ├── __init__.py           # Package exports & load_model factory
+│   ├── tokenizer.py          # Standards-informed discrete tokenizer
+│   ├── model.py              # EdgeV2XBERT architecture (1.11M params)
+│   ├── pretrain.py           # Joint MTM & Alignment pre-training engine
+│   ├── evaluate.py           # Downstream evaluation engine (zero leakage)
+│   └── data.py               # Disjoint dataset loader
+├── schemas/                  # Official ASN.1 Schema definitions
+│   ├── SAE_J2735_2020.asn    # SAE J2735:2020 message set
+│   └── ETSI_CAM_CDD_DENM.asn # ETSI EN 302 637-2 specifications
+├── experiments/              # Full experiment & figure scripts
+│   ├── run_v2x_bert_pipeline.py
+│   └── generate_v2x_bert_figures.py
+├── results/                  # Generated CSV tables, JSON logs, & 300 DPI figures
+├── paper/                    # IEEE Transactions LaTeX manuscript
+├── pyproject.toml            # PEP 621 Standard Build Specification
+└── README.md
 ```
 
 ---
 
 ## 📜 Citation
 
-If you build upon `V2X-BERT` in your research, please cite our manuscript:
+If you use V2X-BERT in your research, please cite:
 
 ```bibtex
 @article{tanveer2026v2xbert,
-  title={{V2X-BERT}: A Domain-Specific Transformer for Standards-Aware Vehicular Communication and Masked Telemetry Modeling},
-  author={Tanveer, Muhammad Umer},
+  author={Tanveer, Muhammad Umer and Salam, Abdu},
+  title={{V2X-BERT}: A Compact Standards-Aware Bidirectional Transformer for Vehicular Telemetry and Misbehavior Detection},
   journal={IEEE Transactions on Intelligent Transportation Systems},
-  volume={XX},
-  number={X},
-  pages={1--14},
-  year={2026},
-  publisher={IEEE}
+  year={2026}
 }
 ```
-
----
-
-## 📄 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
