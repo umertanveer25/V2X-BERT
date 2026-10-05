@@ -1,6 +1,8 @@
 """
-Strictly Leakage-Free Scenario-Disjoint & Vehicle-Disjoint Dataset Loader for V2X-BERT.
-Partitions data strictly by discrete simulation scenarios and vehicle IDs to guarantee zero data leakage.
+Strictly Leakage-Free Sender-Disjoint & Scenario-Disjoint Dataset Loader for V2X-BERT.
+Supports both:
+  1. Sender-Disjoint Split (Vehicle / StationID-Disjoint): Test set consists of completely unseen transmitting vehicles.
+  2. Scenario-Disjoint Split: Test set consists of completely unseen simulation scenarios.
 """
 
 import os
@@ -17,13 +19,14 @@ class V2XDataset(Dataset):
     """
     Holds curated standards-tokenized V2X sequences, attention masks, labels, and provenance metadata.
     """
-    def __init__(self, sequences, attention_masks, labels, attack_types, scenario_ids, vehicle_ids, max_len=64):
+    def __init__(self, sequences, attention_masks, labels, attack_types, sender_ids, scenario_ids, max_len=64):
         self.sequences = torch.tensor(sequences, dtype=torch.long)
         self.attention_masks = torch.tensor(attention_masks, dtype=torch.long)
         self.labels = torch.tensor(labels, dtype=torch.long)
         self.attack_types = list(attack_types)
+        self.sender_ids = list(sender_ids)
+        self.vehicle_ids = self.sender_ids  # Alias for sender vehicle station IDs
         self.scenario_ids = list(scenario_ids)
-        self.vehicle_ids = list(vehicle_ids)
         self.max_len = max_len
 
     def __len__(self):
@@ -33,7 +36,7 @@ class V2XDataset(Dataset):
         return self.sequences[idx], self.attention_masks[idx], self.labels[idx]
 
 
-def generate_scenario_disjoint_benchmark(
+def generate_benchmark_corpus(
     num_scenarios=10,
     sequences_per_scenario=500,
     seq_len=5,
@@ -41,8 +44,8 @@ def generate_scenario_disjoint_benchmark(
     seed=42
 ):
     """
-    Generates a multi-scenario benchmark corpus with distinct environmental dynamics and vehicle fleets.
-    Scenarios 1-8 are dedicated to Training, while Scenarios 9-10 are strictly Held-Out Test Scenarios.
+    Generates a multi-scenario benchmark corpus with distinct environmental dynamics and sender fleets.
+    Each transmitting vehicle has a distinct Sender StationID / Pseudonym.
     """
     np.random.seed(seed)
     tokenizer = V2XTokenizer()
@@ -61,7 +64,7 @@ def generate_scenario_disjoint_benchmark(
     ]
 
     sequences, masks, labels, attack_types = [], [], [], []
-    scenario_ids, vehicle_ids = [], []
+    sender_ids, scenario_ids = [], []
 
     attack_names = ["Benign", "SpeedOffset", "DataReplay", "DoSDisrupt", "PosOffset"]
 
@@ -70,10 +73,10 @@ def generate_scenario_disjoint_benchmark(
         min_spd, max_spd = profile["speed_range"]
         accel_scale = profile["accel_std"]
 
-        # 50 distinct vehicles per scenario
-        num_vehicles = max(1, sequences_per_scenario // 10)
-        for v_local_idx in range(num_vehicles):
-            veh_id = f"VEH_{sc_idx:02d}_{v_local_idx:03d}"
+        # 50 distinct senders per scenario
+        num_senders = max(1, sequences_per_scenario // 10)
+        for s_idx in range(num_senders):
+            sender_id = f"SENDER_{sc_idx:02d}_{s_idx:03d}"
 
             # Vehicle trajectory
             v0 = np.random.uniform(min_spd, max_spd)
@@ -81,8 +84,8 @@ def generate_scenario_disjoint_benchmark(
             pos_x = np.random.uniform(-500.0, 500.0)
             pos_y = np.random.uniform(-500.0, 500.0)
 
-            seqs_for_veh = sequences_per_scenario // num_vehicles
-            for seq_k in range(seqs_for_veh):
+            seqs_for_sender = sequences_per_scenario // num_senders
+            for seq_k in range(seqs_for_sender):
                 is_attack = 1 if np.random.rand() > 0.5 else 0
                 atk_idx = np.random.randint(1, 5) if is_attack else 0
                 atk_type = attack_names[atk_idx]
@@ -123,42 +126,134 @@ def generate_scenario_disjoint_benchmark(
                 masks.append(seq_mask.numpy())
                 labels.append(is_attack)
                 attack_types.append(atk_type)
+                sender_ids.append(sender_id)
                 scenario_ids.append(sc_name)
-                vehicle_ids.append(veh_id)
 
     return (
         np.array(sequences),
         np.array(masks),
         np.array(labels),
         attack_types,
-        scenario_ids,
-        vehicle_ids
+        sender_ids,
+        scenario_ids
     )
 
 
-def verify_disjoint_split(train_dataset: V2XDataset, test_dataset: V2XDataset):
+def split_by_sender_disjoint(full_dataset: V2XDataset, test_ratio: float = 0.20, seed: int = 42):
     """
-    Formally verifies that Train and Test partitions share zero scenarios and zero vehicle IDs.
-    Raises AssertionError if any data leakage is detected.
+    Partitions the dataset strictly by Sender StationID / Pseudonym.
+    Guarantees that test senders never appeared in the training set (Zero Transmitter Leakage).
+    """
+    unique_senders = np.array(sorted(list(set(full_dataset.sender_ids))))
+    np.random.seed(seed)
+    np.random.shuffle(unique_senders)
+
+    n_test_senders = max(1, int(len(unique_senders) * test_ratio))
+    test_senders_set = set(unique_senders[:n_test_senders])
+    train_senders_set = set(unique_senders[n_test_senders:])
+
+    train_idx = [i for i, s in enumerate(full_dataset.sender_ids) if s in train_senders_set]
+    test_idx = [i for i, s in enumerate(full_dataset.sender_ids) if s in test_senders_set]
+
+    train_ds = V2XDataset(
+        full_dataset.sequences[train_idx].numpy(),
+        full_dataset.attention_masks[train_idx].numpy(),
+        full_dataset.labels[train_idx].numpy(),
+        [full_dataset.attack_types[i] for i in train_idx],
+        [full_dataset.sender_ids[i] for i in train_idx],
+        [full_dataset.scenario_ids[i] for i in train_idx],
+        max_len=full_dataset.max_len
+    )
+
+    test_ds = V2XDataset(
+        full_dataset.sequences[test_idx].numpy(),
+        full_dataset.attention_masks[test_idx].numpy(),
+        full_dataset.labels[test_idx].numpy(),
+        [full_dataset.attack_types[i] for i in test_idx],
+        [full_dataset.sender_ids[i] for i in test_idx],
+        [full_dataset.scenario_ids[i] for i in test_idx],
+        max_len=full_dataset.max_len
+    )
+
+    verify_sender_disjoint_split(train_ds, test_ds)
+    return train_ds, test_ds
+
+
+def split_by_scenario_disjoint(full_dataset: V2XDataset, test_scenarios: set = None):
+    """
+    Partitions the dataset strictly by discrete Simulation Scenario.
+    Guarantees that test scenarios never appeared in the training set.
+    """
+    if test_scenarios is None:
+        unique_scenarios = sorted(list(set(full_dataset.scenario_ids)))
+        test_scenarios = set(unique_scenarios[-2:])  # Default last 2 scenarios
+
+    train_idx = [i for i, sc in enumerate(full_dataset.scenario_ids) if sc not in test_scenarios]
+    test_idx = [i for i, sc in enumerate(full_dataset.scenario_ids) if sc in test_scenarios]
+
+    train_ds = V2XDataset(
+        full_dataset.sequences[train_idx].numpy(),
+        full_dataset.attention_masks[train_idx].numpy(),
+        full_dataset.labels[train_idx].numpy(),
+        [full_dataset.attack_types[i] for i in train_idx],
+        [full_dataset.sender_ids[i] for i in train_idx],
+        [full_dataset.scenario_ids[i] for i in train_idx],
+        max_len=full_dataset.max_len
+    )
+
+    test_ds = V2XDataset(
+        full_dataset.sequences[test_idx].numpy(),
+        full_dataset.attention_masks[test_idx].numpy(),
+        full_dataset.labels[test_idx].numpy(),
+        [full_dataset.attack_types[i] for i in test_idx],
+        [full_dataset.sender_ids[i] for i in test_idx],
+        [full_dataset.scenario_ids[i] for i in test_idx],
+        max_len=full_dataset.max_len
+    )
+
+    verify_scenario_disjoint_split(train_ds, test_ds)
+    return train_ds, test_ds
+
+
+def verify_sender_disjoint_split(train_dataset: V2XDataset, test_dataset: V2XDataset):
+    """
+    Formally verifies that Train and Test partitions share zero Sender IDs.
+    Raises AssertionError if any transmitter leakage is detected.
+    """
+    train_senders = set(train_dataset.sender_ids)
+    test_senders = set(test_dataset.sender_ids)
+    overlap = train_senders.intersection(test_senders)
+
+    if len(overlap) > 0:
+        raise AssertionError(f"[SENDER LEAKAGE DETECTED] Shared Sender IDs between train and test: {overlap}")
+
+    print("\n" + "="*75)
+    print("   FORMAL SENDER-DISJOINT VERIFICATION: PASSED (ZERO TRANSMITTER LEAKAGE)")
+    print(f"   Train Senders ({len(train_senders)}) | Test Senders ({len(test_senders)}) | Overlap: {len(overlap)}")
+    print("="*75 + "\n")
+
+
+def verify_scenario_disjoint_split(train_dataset: V2XDataset, test_dataset: V2XDataset):
+    """
+    Formally verifies that Train and Test partitions share zero Scenarios and zero Senders.
     """
     train_scenarios = set(train_dataset.scenario_ids)
     test_scenarios = set(test_dataset.scenario_ids)
-    scenario_overlap = train_scenarios.intersection(test_scenarios)
+    sc_overlap = train_scenarios.intersection(test_scenarios)
 
-    train_vehicles = set(train_dataset.vehicle_ids)
-    test_vehicles = set(test_dataset.vehicle_ids)
-    vehicle_overlap = train_vehicles.intersection(test_vehicles)
+    train_senders = set(train_dataset.sender_ids)
+    test_senders = set(test_dataset.sender_ids)
+    sender_overlap = train_senders.intersection(test_senders)
 
-    if len(scenario_overlap) > 0:
-        raise AssertionError(f"[DATA LEAKAGE DETECTED] Shared scenarios between train and test: {scenario_overlap}")
-    if len(vehicle_overlap) > 0:
-        raise AssertionError(f"[DATA LEAKAGE DETECTED] Shared vehicle IDs between train and test: {vehicle_overlap}")
+    if len(sc_overlap) > 0:
+        raise AssertionError(f"[SCENARIO LEAKAGE DETECTED] Shared scenarios: {sc_overlap}")
+    if len(sender_overlap) > 0:
+        raise AssertionError(f"[SENDER LEAKAGE DETECTED] Shared senders: {sender_overlap}")
 
     print("\n" + "="*75)
-    print("   FORMAL SCENARIO & SENDER DISJOINT VERIFICATION: PASSED (ZERO LEAKAGE)")
-    print(f"   Train Scenarios ({len(train_scenarios)}): {sorted(list(train_scenarios))}")
-    print(f"   Test Scenarios  ({len(test_scenarios)}): {sorted(list(test_scenarios))}")
-    print(f"   Scenario Intersection: {len(scenario_overlap)} | Vehicle ID Intersection: {len(vehicle_overlap)}")
+    print("   FORMAL SCENARIO-DISJOINT VERIFICATION: PASSED (ZERO SCENARIO LEAKAGE)")
+    print(f"   Train Scenarios ({len(train_scenarios)}) | Test Scenarios ({len(test_scenarios)}) | Overlap: {len(sc_overlap)}")
+    print(f"   Sender Overlap: {len(sender_overlap)}")
     print("="*75 + "\n")
 
 
@@ -167,50 +262,33 @@ def load_veremi_standards_dataset(
     max_samples=5000,
     seq_len=5,
     window_tokens=64,
+    split_mode="scenario_disjoint",
     test_ratio=0.20
 ):
     """
-    Loads multi-scenario V2X data and partitions strictly by discrete Scenarios and Vehicle IDs.
-    Guarantees that test scenarios were never seen during pre-training or fine-tuning.
+    Loads multi-scenario V2X data and partitions using either 'sender_disjoint' or 'scenario_disjoint'.
     """
     total_scenarios = 10
     seq_per_scenario = max(50, max_samples // total_scenarios)
 
-    seqs, masks, labels, atk_types, sc_ids, veh_ids = generate_scenario_disjoint_benchmark(
+    seqs, masks, labels, atk_types, senders, scenarios = generate_benchmark_corpus(
         num_scenarios=total_scenarios,
         sequences_per_scenario=seq_per_scenario,
         seq_len=seq_len,
         window_tokens=window_tokens
     )
 
-    # Scenarios 1 to 8 -> Training partition (80%)
-    # Scenarios 9 and 10 -> Held-Out Test partition (20%)
-    test_scenario_names = {"Scenario_09_HeldOut_AdverseHighway", "Scenario_10_HeldOut_ComplexIntersection"}
-
-    train_idx = [i for i, sc in enumerate(sc_ids) if sc not in test_scenario_names]
-    test_idx = [i for i, sc in enumerate(sc_ids) if sc in test_scenario_names]
-
-    train_dataset = V2XDataset(
-        seqs[train_idx],
-        masks[train_idx],
-        labels[train_idx],
-        [atk_types[i] for i in train_idx],
-        [sc_ids[i] for i in train_idx],
-        [veh_ids[i] for i in train_idx],
+    full_ds = V2XDataset(
+        seqs,
+        masks,
+        labels,
+        atk_types,
+        senders,
+        scenarios,
         max_len=window_tokens
     )
 
-    test_dataset = V2XDataset(
-        seqs[test_idx],
-        masks[test_idx],
-        labels[test_idx],
-        [atk_types[i] for i in test_idx],
-        [sc_ids[i] for i in test_idx],
-        [veh_ids[i] for i in test_idx],
-        max_len=window_tokens
-    )
-
-    # Formally verify zero overlap
-    verify_disjoint_split(train_dataset, test_dataset)
-
-    return train_dataset, test_dataset
+    if split_mode == "sender_disjoint":
+        return split_by_sender_disjoint(full_ds, test_ratio=test_ratio)
+    else:
+        return split_by_scenario_disjoint(full_ds)
