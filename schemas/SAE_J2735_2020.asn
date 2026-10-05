@@ -1,0 +1,192 @@
+-- ==============================================================================
+-- OFFICIAL SAE J2735:2020 ASN.1 DEFINITIONS FOR V2X-BERT SCHEMA COMPLIANCE
+-- Society of Automotive Engineers (SAE) International Standard
+-- ==============================================================================
+
+SAE-J2735-MessageSet DEFINITIONS AUTOMATIC TAGS ::= BEGIN
+
+-- 1. Basic Safety Message (BSM)
+BasicSafetyMessage ::= SEQUENCE {
+    coreData    BSMcoreData,
+    partII      SEQUENCE (SIZE(1..8)) OF BSMpartIIExtension OPTIONAL,
+    ...
+}
+
+BSMcoreData ::= SEQUENCE {
+    msgCnt        MsgCount,            -- 0..127 (Sequence counter)
+    id            TemporaryID,         -- 4-byte randomized MAC/OBU identifier
+    secMark       DSecond,             -- 0..65535 (1 ms resolution within minute)
+    lat           Latitude,            -- -900000000..900000001 (1/10th microdegree)
+    long          Longitude,           -- -1799999999..1800000001 (1/10th microdegree)
+    elev          Elevation,           -- -4096..61439 (10 cm steps, -409.6m to +6143.9m)
+    accuracy      PositionalAccuracy,  -- Semi-major/minor axis 95% confidence bounds
+    transmission  TransmissionState,   -- ENUMERATED {neutral, park, forwardGears, reverseGears}
+    speed         Speed,               -- 0..8191 (0.02 m/s resolution: 0 to 163.8 m/s)
+    heading       Heading,             -- 0..28799 (0.0125 degree resolution: 0 to 359.9875 deg)
+    angle         SteeringWheelAngle,  -- -126..127 (1.5 degree resolution)
+    accelSet      AccelerationSet4Way, -- Lon (0.01 m/s^2), Lat (0.01 m/s^2), Vert (0.02 g), Yaw (0.01 deg/s)
+    brakes        BrakeSystemStatus,   -- BIT STRING: {wheelBrakes, traction, abs, scs, brakeBoost}
+    size          VehicleSize          -- width (1 cm steps), length (1 cm steps)
+}
+
+BSMpartIIExtension ::= SEQUENCE {
+    partII-Id     INTEGER (0..63),
+    partII-Value  OCTET STRING
+}
+
+-- 2. Signal Phase and Timing (SPaT)
+SPAT ::= SEQUENCE {
+    timeStamp     MinuteOfTheYear OPTIONAL,
+    name          DescriptiveName OPTIONAL,
+    intersections IntersectionStateList,
+    ...
+}
+
+IntersectionStateList ::= SEQUENCE (SIZE(1..32)) OF IntersectionState
+
+IntersectionState ::= SEQUENCE {
+    name          DescriptiveName OPTIONAL,
+    id            IntersectionReferenceID,
+    revision      MsgCount,
+    status        IntersectionStatusObject,
+    moy           MinuteOfTheYear OPTIONAL,
+    timeStamp     DSecond OPTIONAL,
+    states        MovementList
+}
+
+MovementList ::= SEQUENCE (SIZE(1..255)) OF MovementState
+
+MovementState ::= SEQUENCE {
+    movementName  DescriptiveName OPTIONAL,
+    signalGroup   SignalGroupID,
+    state-time-speed MovementEventList
+}
+
+MovementEventList ::= SEQUENCE (SIZE(1..16)) OF MovementEvent
+
+MovementEvent ::= SEQUENCE {
+    eventState    MovementPhaseState, -- ENUMERATED {stop-And-Remain(1), permissive-Movement-Allowed(5), protected-Movement-Allowed(6)}
+    timing        TimeChangeDetails OPTIONAL
+}
+
+-- 3. Personal Safety Message (PSM) for VRU
+PersonalSafetyMessage ::= SEQUENCE {
+    basicType     PersonalDeviceUserType, -- ENUMERATED {unavailable(0), pedestrian(1), pedalcyclist(2)}
+    secMark       DSecond,
+    msgCnt        MsgCount,
+    id            TemporaryID,
+    position      Position3D,
+    accuracy      PositionalAccuracy,
+    speed         Velocity,
+    heading       Heading,
+    ...
+}
+
+-- Basic Types and Supporting Structures
+MsgCount ::= INTEGER (0..127)
+TemporaryID ::= OCTET STRING (SIZE(4))
+DSecond ::= INTEGER (0..65535)
+Latitude ::= INTEGER (-900000000..900000001)
+Longitude ::= INTEGER (-1799999999..1800000001)
+Elevation ::= INTEGER (-4096..61439)
+Speed ::= INTEGER (0..8191)
+Heading ::= INTEGER (0..28799)
+SteeringWheelAngle ::= INTEGER (-126..127)
+MinuteOfTheYear ::= INTEGER (0..527040)
+SignalGroupID ::= INTEGER (0..255)
+Velocity ::= INTEGER (0..8191)
+DescriptiveName ::= IA5String (SIZE(1..63))
+IntersectionStatusObject ::= BIT STRING (SIZE(16))
+
+PositionalAccuracy ::= SEQUENCE {
+    semiMajor     INTEGER (0..255),
+    semiMinor     INTEGER (0..255),
+    orientation   INTEGER (0..65535)
+}
+
+TransmissionState ::= ENUMERATED {
+    neutral       (0),
+    park          (1),
+    forwardGears  (2),
+    reverseGears  (3),
+    reserved1     (4),
+    reserved2     (5),
+    reserved3     (6),
+    unavailable   (7)
+}
+
+AccelerationSet4Way ::= SEQUENCE {
+    long          Acceleration,     -- -2000..2001 (0.01 m/s^2)
+    lat           Acceleration,     -- -2000..2001 (0.01 m/s^2)
+    vert          VerticalAcceleration, -- -127..127 (0.02 g)
+    yaw           YawRate           -- -32767..32767 (0.01 deg/s)
+}
+
+Acceleration ::= INTEGER (-2000..2001)
+VerticalAcceleration ::= INTEGER (-127..127)
+YawRate ::= INTEGER (-32767..32767)
+
+BrakeSystemStatus ::= BIT STRING {
+    unavailable                 (0),
+    leftFront                   (1),
+    leftRear                    (2),
+    rightFront                  (3),
+    rightRear                   (4),
+    tractionControlActive       (5),
+    antiLockBrakeActive         (6),
+    stabilityControlActive      (7),
+    brakeBoostApplied           (8),
+    auxiliaryBrakeStatus        (9)
+} (SIZE(16))
+
+VehicleSize ::= SEQUENCE {
+    width         INTEGER (0..1023), -- 1 cm steps
+    length        INTEGER (0..4095)  -- 1 cm steps
+}
+
+IntersectionReferenceID ::= SEQUENCE {
+    region        INTEGER (0..65535) OPTIONAL,
+    id            INTEGER (0..65535)
+}
+
+MovementPhaseState ::= ENUMERATED {
+    unavailable                         (0),
+    dark                                (1),
+    stop-Then-Proceed                   (2),
+    stop-And-Remain                     (3),
+    pre-Movement                        (4),
+    permissive-Movement-Allowed         (5),
+    protected-Movement-Allowed          (6),
+    permissive-clearance                (7),
+    protected-clearance                 (8),
+    caution-Conflicting-Traffic         (9)
+}
+
+TimeChangeDetails ::= SEQUENCE {
+    startTime     TimeMark OPTIONAL,
+    minEndTime    TimeMark,
+    maxEndTime    TimeMark OPTIONAL,
+    likelyTime    TimeMark OPTIONAL,
+    confidence    TimeIntervalConfidence OPTIONAL,
+    nextTime      TimeMark OPTIONAL
+}
+
+TimeMark ::= INTEGER (0..36001) -- Tenths of seconds in hour
+TimeIntervalConfidence ::= INTEGER (0..15)
+
+PersonalDeviceUserType ::= ENUMERATED {
+    unavailable         (0),
+    pedestrian          (1),
+    pedalcyclist        (2),
+    publicSafetyWorker  (3),
+    animal              (4),
+    ...
+}
+
+Position3D ::= SEQUENCE {
+    lat           Latitude,
+    long          Longitude,
+    elevation     Elevation OPTIONAL
+}
+
+END

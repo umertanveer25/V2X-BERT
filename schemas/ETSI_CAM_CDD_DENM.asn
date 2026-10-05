@@ -1,0 +1,381 @@
+-- ==============================================================================
+-- OFFICIAL ETSI EN 302 637-2 / TS 102 894-2 ASN.1 DEFINITIONS FOR V2X-BERT
+-- European Telecommunications Standards Institute (ETSI)
+-- ==============================================================================
+
+ETSI-ITS-CDD DEFINITIONS AUTOMATIC TAGS ::= BEGIN
+
+-- 1. Cooperative Awareness Message (CAM)
+CoopAwareness ::= SEQUENCE {
+    generationDeltaTime   GenerationDeltaTime, -- 0..65535 (Time difference in ms)
+    camParameters         CamParameters
+}
+
+CamParameters ::= SEQUENCE {
+    basicContainer              BasicContainer,
+    highFrequencyContainer      HighFrequencyContainer,
+    lowFrequencyContainer       LowFrequencyContainer OPTIONAL,
+    specialVehicleContainer     SpecialVehicleContainer OPTIONAL,
+    ...
+}
+
+BasicContainer ::= SEQUENCE {
+    stationType                 StationType,
+    referencePosition           ReferencePosition
+}
+
+HighFrequencyContainer ::= CHOICE {
+    basicVehicleContainerHighFrequency BasicVehicleContainerHighFrequency,
+    rsuContainerHighFrequency          RSUContainerHighFrequency,
+    ...
+}
+
+BasicVehicleContainerHighFrequency ::= SEQUENCE {
+    heading                     Heading,
+    speed                       Speed,
+    driveDirection              DriveDirection,
+    vehicleLength               VehicleLength,
+    vehicleWidth                VehicleWidth,
+    longitudinalAcceleration    LongitudinalAcceleration,
+    curvature                   Curvature,
+    curvatureCalculationMode    CurvatureCalculationMode,
+    yawRate                     YawRate,
+    accelerationControlStatus   AccelerationControlStatus OPTIONAL,
+    lanePosition                LanePosition OPTIONAL,
+    steeringWheelAngle          SteeringWheelAngle OPTIONAL,
+    lateralAcceleration         LateralAcceleration OPTIONAL,
+    verticalAcceleration        VerticalAcceleration OPTIONAL,
+    performanceClass            PerformanceClass OPTIONAL,
+    cenDsrcTollingZone          CenDsrcTollingZone OPTIONAL
+}
+
+RSUContainerHighFrequency ::= SEQUENCE {
+    protectedCommunicationZonesRSU ProtectedCommunicationZonesRSU OPTIONAL,
+    ...
+}
+
+LowFrequencyContainer ::= CHOICE {
+    basicVehicleContainerLowFrequency BasicVehicleContainerLowFrequency,
+    ...
+}
+
+BasicVehicleContainerLowFrequency ::= SEQUENCE {
+    vehicleRole                 VehicleRole,
+    exteriorLights              ExteriorLights,
+    pathHistory                 PathHistory
+}
+
+SpecialVehicleContainer ::= CHOICE {
+    publicTransportContainer    PublicTransportContainer,
+    specialTransportContainer   SpecialTransportContainer,
+    dangerousGoodsContainer     DangerousGoodsContainer,
+    roadWorksContainerBasic     RoadWorksContainerBasic,
+    rescueContainer             RescueContainer,
+    emergencyContainer          EmergencyContainer,
+    safetyCarContainer          SafetyCarContainer,
+    ...
+}
+
+-- 2. Decentralized Environmental Notification Message (DENM)
+DecentralizedEnvironmentalNotificationMessage ::= SEQUENCE {
+    management      ManagementContainer,
+    situation       SituationContainer OPTIONAL,
+    location        LocationContainer OPTIONAL,
+    alacarte        AlacarteContainer OPTIONAL
+}
+
+ManagementContainer ::= SEQUENCE {
+    actionID                  ActionID,
+    detectionTime             TimestampIts,
+    referenceTime             TimestampIts,
+    termination               Termination OPTIONAL,
+    eventPosition             ReferencePosition,
+    relevanceDistance         RelevanceDistance OPTIONAL,
+    relevanceTrafficDirection RelevanceTrafficDirection OPTIONAL,
+    validityDuration          ValidityDuration DEFAULT 600,
+    transmissionInterval      TransmissionInterval OPTIONAL,
+    stationType               StationType,
+    ...
+}
+
+SituationContainer ::= SEQUENCE {
+    informationQuality        InformationQuality,
+    eventType                 CauseCode,
+    linkedCause               CauseCode OPTIONAL,
+    eventHistory              EventHistory OPTIONAL,
+    ...
+}
+
+LocationContainer ::= SEQUENCE {
+    eventSpeed                Speed OPTIONAL,
+    eventPositionHeading      Heading OPTIONAL,
+    traces                    Traces,
+    roadType                  RoadType OPTIONAL,
+    ...
+}
+
+AlacarteContainer ::= SEQUENCE {
+    lanePosition              LanePosition OPTIONAL,
+    impactReduction           ImpactReductionContainer OPTIONAL,
+    externalTemperature       Temperature OPTIONAL,
+    roadWorks                 RoadWorksContainerExtended OPTIONAL,
+    positioningSolution       PositioningSolutionType OPTIONAL,
+    stationaryVehicle         StationaryVehicleContainer OPTIONAL,
+    ...
+}
+
+-- Common Data Dictionary (CDD) Supporting Types
+GenerationDeltaTime ::= INTEGER (0..65535)
+StationType ::= INTEGER {
+    unknown(0), pedestrian(1), cyclist(2), moped(3), motorcycle(4),
+    passengerCar(5), bus(6), lightTruck(7), heavyTruck(8), trailer(9),
+    specialVehicles(10), tram(11), roadSideUnit(15)
+} (0..255)
+
+ReferencePosition ::= SEQUENCE {
+    latitude                  Latitude,
+    longitude                 Longitude,
+    positionConfidenceEllipse PosConfidenceEllipse,
+    altitude                  Altitude
+}
+
+Latitude ::= INTEGER (-900000000..900000001)
+Longitude ::= INTEGER (-1799999999..1800000001)
+Altitude ::= SEQUENCE {
+    altitudeValue             AltitudeValue,
+    altitudeConfidence        AltitudeConfidence
+}
+AltitudeValue ::= INTEGER (-100000..800001)
+AltitudeConfidence ::= ENUMERATED {
+    alt-000-01(0), alt-000-02(1), alt-000-05(2), alt-000-10(3),
+    alt-000-20(4), alt-000-50(5), alt-001-00(6), alt-002-00(7),
+    alt-005-00(8), alt-010-00(9), alt-020-00(10), alt-050-00(11),
+    alt-100-00(12), alt-200-00(13), outOfRange(14), unavailable(15)
+}
+
+PosConfidenceEllipse ::= SEQUENCE {
+    semiMajorConfidence       SemiAxisLength,
+    semiMinorConfidence       SemiAxisLength,
+    semiMajorOrientation      HeadingValue
+}
+SemiAxisLength ::= INTEGER (0..4095)
+
+Heading ::= SEQUENCE {
+    headingValue              HeadingValue,
+    headingConfidence         HeadingConfidence
+}
+HeadingValue ::= INTEGER (0..3601) -- 0.1 degree resolution
+HeadingConfidence ::= INTEGER (1..127)
+
+Speed ::= SEQUENCE {
+    speedValue                SpeedValue,
+    speedConfidence           SpeedConfidence
+}
+SpeedValue ::= INTEGER (0..16383) -- 0.01 m/s resolution
+SpeedConfidence ::= INTEGER (1..127)
+
+DriveDirection ::= ENUMERATED {forward(0), backward(1), unavailable(2)}
+
+LongitudinalAcceleration ::= SEQUENCE {
+    longitudinalAccelerationValue         LongitudinalAccelerationValue,
+    longitudinalAccelerationConfidence    AccelerationConfidence
+}
+LongitudinalAccelerationValue ::= INTEGER (-160..161) -- 0.1 m/s^2 resolution
+AccelerationConfidence ::= INTEGER (1..102)
+
+LateralAcceleration ::= SEQUENCE {
+    lateralAccelerationValue              LateralAccelerationValue,
+    lateralAccelerationConfidence         AccelerationConfidence
+}
+LateralAccelerationValue ::= INTEGER (-160..161)
+
+VerticalAcceleration ::= SEQUENCE {
+    verticalAccelerationValue             VerticalAccelerationValue,
+    verticalAccelerationConfidence        AccelerationConfidence
+}
+VerticalAccelerationValue ::= INTEGER (-160..161)
+
+YawRate ::= SEQUENCE {
+    yawRateValue              YawRateValue,
+    yawRateConfidence         YawRateConfidence
+}
+YawRateValue ::= INTEGER (-32766..32767) -- 0.01 deg/s
+YawRateConfidence ::= ENUMERATED {degSec-000-01(0), degSec-000-05(1), degSec-000-10(2), degSec-001-00(3), degSec-005-00(4), degSec-010-00(5), degSec-100-00(6), outOfRange(7), unavailable(8)}
+
+VehicleLength ::= SEQUENCE {
+    vehicleLengthValue        VehicleLengthValue,
+    vehicleLengthConfidenceIndication VehicleLengthConfidenceIndication
+}
+VehicleLengthValue ::= INTEGER (1..1023) -- 0.1 m resolution
+VehicleLengthConfidenceIndication ::= ENUMERATED {noTrailerPresent(0), trailerPresentWithKnownLength(1), trailerPresentWithUnknownLength(2), trailerPresenceIsUnknown(3), unavailable(4)}
+VehicleWidth ::= INTEGER (1..62) -- 0.1 m resolution
+
+Curvature ::= SEQUENCE {
+    curvatureValue            CurvatureValue,
+    curvatureConfidence       CurvatureConfidence
+}
+CurvatureValue ::= INTEGER (-1023..1023)
+CurvatureConfidence ::= ENUMERATED {onePerMeter-0-00002(0), onePerMeter-0-0001(1), onePerMeter-0-0005(2), onePerMeter-0-002(3), onePerMeter-0-01(4), onePerMeter-0-1(5), outOfRange(6), unavailable(7)}
+CurvatureCalculationMode ::= ENUMERATED {yawRateUsed(0), yawRateNotUsed(1), unavailable(2)}
+
+SteeringWheelAngle ::= SEQUENCE {
+    steeringWheelAngleValue       SteeringWheelAngleValue,
+    steeringWheelAngleConfidence  SteeringWheelAngleConfidence
+}
+SteeringWheelAngleValue ::= INTEGER (-511..512) -- 1.5 degree
+SteeringWheelAngleConfidence ::= INTEGER (1..127)
+
+LanePosition ::= INTEGER (-1..14)
+PerformanceClass ::= INTEGER (0..7)
+CenDsrcTollingZone ::= SEQUENCE {
+    protectedZoneLatitude     Latitude,
+    protectedZoneLongitude    Longitude,
+    cenDsrcTollingZoneID      CenDsrcTollingZoneID OPTIONAL
+}
+CenDsrcTollingZoneID ::= INTEGER (0..134217727)
+ProtectedCommunicationZonesRSU ::= SEQUENCE (SIZE(1..16)) OF ProtectedCommunicationZone
+ProtectedCommunicationZone ::= SEQUENCE {
+    protectedZoneType         ProtectedZoneType,
+    expiryTime                TimestampIts OPTIONAL,
+    protectedZoneLatitude     Latitude,
+    protectedZoneLongitude    Longitude,
+    protectedZoneRadius       ProtectedZoneRadius OPTIONAL,
+    protectedZoneID           ProtectedZoneID OPTIONAL
+}
+ProtectedZoneType ::= ENUMERATED {cenDsrcTolling(0), ...}
+ProtectedZoneRadius ::= INTEGER (1..255)
+ProtectedZoneID ::= INTEGER (0..134217727)
+
+VehicleRole ::= ENUMERATED {default(0), publicTransport(1), specialTransport(2), dangerousGoods(3), roadWork(4), rescue(5), emergency(6), safetyCar(7), agriculture(8), commercial(9), military(10), roadOperator(11), taxi(12), reserved1(13), reserved2(14), custom1(15)}
+
+ExteriorLights ::= BIT STRING {
+    lowBeamHeadlightsOn       (0),
+    highBeamHeadlightsOn      (1),
+    leftTurnSignalOn          (2),
+    rightTurnSignalOn         (3),
+    daytimeRunningLightsOn    (4),
+    reverseLightOn            (5),
+    fogLightOn                (6),
+    parkingLightsOn           (7)
+} (SIZE(8))
+
+PathHistory ::= SEQUENCE (SIZE(0..40)) OF PathPoint
+PathPoint ::= SEQUENCE {
+    pathPosition              DeltaReferencePosition,
+    pathDeltaTime             PathDeltaTime OPTIONAL
+}
+DeltaReferencePosition ::= SEQUENCE {
+    deltaLatitude             DeltaLatitude,
+    deltaLongitude            DeltaLongitude,
+    deltaAltitude             DeltaAltitude
+}
+DeltaLatitude ::= INTEGER (-131071..131072)
+DeltaLongitude ::= INTEGER (-131071..131072)
+DeltaAltitude ::= INTEGER (-12700..12800)
+PathDeltaTime ::= INTEGER (1..65535)
+
+TimestampIts ::= INTEGER (0..4398046511103)
+ActionID ::= SEQUENCE {
+    originatingStationID      StationID,
+    sequenceNumber            SequenceNumber
+}
+StationID ::= INTEGER (0..4294967295)
+SequenceNumber ::= INTEGER (0..65535)
+Termination ::= ENUMERATED {isCancellation(0), isNegation(1)}
+RelevanceDistance ::= ENUMERATED {lessThan50m(0), lessThan100m(1), lessThan200m(2), lessThan500m(3), lessThan1000m(4), lessThan5km(5), lessThan10km(6), over10km(7)}
+RelevanceTrafficDirection ::= ENUMERATED {allTrafficDirections(0), upstreamTraffic(1), downstreamTraffic(2), oppositeTraffic(3)}
+ValidityDuration ::= INTEGER (0..86400)
+TransmissionInterval ::= INTEGER (1..10000)
+InformationQuality ::= INTEGER (0..7)
+CauseCode ::= SEQUENCE {
+    causeCode                 CauseCodeType,
+    subCauseCode              SubCauseCodeType
+}
+CauseCodeType ::= INTEGER (0..255)
+SubCauseCodeType ::= INTEGER (0..255)
+EventHistory ::= SEQUENCE (SIZE(1..23)) OF EventPoint
+EventPoint ::= SEQUENCE {
+    eventPosition             DeltaReferencePosition,
+    eventDeltaTime            PathDeltaTime OPTIONAL,
+    informationQuality        InformationQuality
+}
+Traces ::= SEQUENCE (SIZE(1..7)) OF PathHistory
+RoadType ::= ENUMERATED {urban-NoStructuralSeparationToOppositeLanes(0), urban-WithStructuralSeparationToOppositeLanes(1), nonUrban-NoStructuralSeparationToOppositeLanes(2), nonUrban-WithStructuralSeparationToOppositeLanes(3)}
+ImpactReductionContainer ::= SEQUENCE {
+    heightLonCarrLeft         HeightLonCarr,
+    heightLonCarrRight        HeightLonCarr,
+    posLonCarrLeft            PosLonCarr,
+    posLonCarrRight           PosLonCarr,
+    positionOfPillars         PositionOfPillars
+}
+HeightLonCarr ::= INTEGER (1..100)
+PosLonCarr ::= INTEGER (1..100)
+PositionOfPillars ::= SEQUENCE (SIZE(1..3)) OF PosPillar
+PosPillar ::= INTEGER (1..30)
+Temperature ::= INTEGER (-60..67)
+RoadWorksContainerExtended ::= SEQUENCE {
+    lightBarSirenInUse        LightBarSirenInUse OPTIONAL,
+    closedLanes               ClosedLanes OPTIONAL,
+    restriction               Restriction OPTIONAL,
+    speedLimit                SpeedValue OPTIONAL,
+    incidentIndication        CauseCode OPTIONAL,
+    recommendedPath           Traces OPTIONAL,
+    startingPointSpeedLimit   DeltaReferencePosition OPTIONAL,
+    trafficFlowRule           TrafficFlowRule OPTIONAL,
+    referenceDenms            ReferenceDenms OPTIONAL
+}
+LightBarSirenInUse ::= BIT STRING {lightBarActivated(0), sirenActivated(1)} (SIZE(2))
+ClosedLanes ::= SEQUENCE {
+    innerhardShoulderStatus   HardShoulderStatus OPTIONAL,
+    outerhardShoulderStatus   HardShoulderStatus OPTIONAL,
+    drivingLaneStatus         DrivingLaneStatus OPTIONAL
+}
+HardShoulderStatus ::= ENUMERATED {availableForDriving(0), closed(1)}
+DrivingLaneStatus ::= BIT STRING (SIZE(1..14))
+Restriction ::= INTEGER (0..255)
+TrafficFlowRule ::= ENUMERATED {none(0), passToRight(1), passToLeft(2)}
+ReferenceDenms ::= SEQUENCE (SIZE(1..8)) OF ActionID
+PositioningSolutionType ::= ENUMERATED {noPositioningSolution(0), sgnss(1), dgnss(2), sgnssPlusRTK(3), dgnssPlusRTK(4), ...}
+StationaryVehicleContainer ::= SEQUENCE {
+    stationarySince           StationarySince OPTIONAL,
+    stationaryCause           CauseCode OPTIONAL,
+    carryingDangerousGoods    DangerousGoodsExtended OPTIONAL,
+    numberOfOccupants         NumberOfOccupants OPTIONAL,
+    vehicleIdentification     VehicleIdentification OPTIONAL,
+    energyStorageType         EnergyStorageType OPTIONAL
+}
+StationarySince ::= ENUMERATED {lessThan1Minute(0), lessThan2Minutes(1), lessThan15Minutes(2), over15Minutes(3)}
+DangerousGoodsExtended ::= SEQUENCE {
+    dangerousGoodsType        DangerousGoodsBasic,
+    unNumber                  INTEGER (0..9999),
+    elevatedTemperature       BOOLEAN,
+    tunnelsRestricted         BOOLEAN,
+    limitedQuantity           BOOLEAN,
+    emergencyActionCode       IA5String (SIZE(1..24)) OPTIONAL,
+    phoneNumber               IA5String (SIZE(1..24)) OPTIONAL,
+    companyName               UTF8String (SIZE(1..24)) OPTIONAL
+}
+DangerousGoodsBasic ::= ENUMERATED {explosives1(0), explosives2(1), explosives3(2), explosives4(3), explosives5(4), explosives6(5), flammableGases(6), nonFlammableGases(7), toxicGases(8), flammableLiquids(9), flammableSolids(10), substancesLiableToSpontaneousCombustion(11), substancesEmittingFlammableGasesUponContactWithWater(12), oxidizingSubstances(13), organicPeroxides(14), toxicSubstances(15), infectiousSubstances(16), radioactiveMaterial(17), corrosiveSubstances(18), miscellaneousDangerousSubstances(19)}
+NumberOfOccupants ::= INTEGER (0..127)
+VehicleIdentification ::= SEQUENCE {
+    wMInumber                 WMInumber OPTIONAL,
+    vDS                       VDS OPTIONAL
+}
+WMInumber ::= IA5String (SIZE(1..3))
+VDS ::= IA5String (SIZE(6))
+EnergyStorageType ::= BIT STRING {hydrogenStorage(0), electricEnergyStorage(1), liquidPropaneGas(2), compressedNaturalGas(3), diesel(4), gasoline(5), ammonia(6)} (SIZE(7))
+PublicTransportContainer ::= SEQUENCE {embarkationStatus BOOLEAN, ptActivation PtActivation OPTIONAL}
+PtActivation ::= SEQUENCE {ptActivationType PtActivationType, ptActivationData PtActivationData}
+PtActivationType ::= INTEGER (0..255)
+PtActivationData ::= OCTET STRING (SIZE(1..20))
+SpecialTransportContainer ::= SEQUENCE {specialTransportType SpecialTransportType, lightBarSirenInUse LightBarSirenInUse}
+SpecialTransportType ::= BIT STRING {heavyLoad(0), excessWidth(1), excessLength(2), excessHeight(3)} (SIZE(4))
+DangerousGoodsContainer ::= SEQUENCE {dangerousGoodsBasic DangerousGoodsBasic}
+RoadWorksContainerBasic ::= SEQUENCE {roadworksSubCauseCode SubCauseCodeType OPTIONAL, lightBarSirenInUse LightBarSirenInUse, closedLanes ClosedLanes OPTIONAL}
+RescueContainer ::= SEQUENCE {lightBarSirenInUse LightBarSirenInUse}
+EmergencyContainer ::= SEQUENCE {lightBarSirenInUse LightBarSirenInUse, incidentIndication CauseCode OPTIONAL, emergencyPriority EmergencyPriority OPTIONAL}
+EmergencyPriority ::= BIT STRING {requestForRightOfWay(0), requestForFreeCrossingAtATrafficLight(1)} (SIZE(2))
+SafetyCarContainer ::= SEQUENCE {lightBarSirenInUse LightBarSirenInUse, incidentIndication CauseCode OPTIONAL, trafficRule TrafficRule OPTIONAL, speedLimit SpeedValue OPTIONAL}
+TrafficRule ::= ENUMERATED {noPassing(0), noPassingForTrucks(1), passToRight(2), passToLeft(3), ...}
+
+END
