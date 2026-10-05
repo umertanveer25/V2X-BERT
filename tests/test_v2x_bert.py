@@ -61,6 +61,59 @@ class TestV2XBERT(unittest.TestCase):
         self.assertEqual(cls_logits.shape, (2, 2))
         self.assertEqual(len(attentions), 4)
 
+    def test_standards_dictionary_encoding(self):
+        tokenizer = V2XTokenizer()
+        
+        # SAE J2735 BSM Dict
+        bsm_dict = {
+            "messageId": "BSM",
+            "speed": 65.0,
+            "accel": -1.5,
+            "heading": 90.0,
+            "dx": 12.0,
+            "dy": 4.0,
+            "brake": 1,
+            "abs": 0
+        }
+        tokens = tokenizer.encode_standard_dict(bsm_dict)
+        self.assertEqual(len(tokens), 6)
+        self.assertEqual(tokens[0], tokenizer.BSM_TOKEN)
+
+        # ETSI CAM Dict
+        cam_dict = {
+            "messageId": "CAM",
+            "speed": 50.0,
+            "accel": 0.2,
+            "heading": 180.0,
+            "dx": 0.0,
+            "dy": 0.0,
+            "light": 1
+        }
+        cam_tokens = tokenizer.encode_standard_dict(cam_dict)
+        self.assertEqual(len(cam_tokens), 6)
+        self.assertEqual(cam_tokens[0], tokenizer.CAM_TOKEN)
+
+        # SAE SPaT Dict
+        spat_dict = {
+            "messageId": "SPAT",
+            "phase": "GREEN",
+            "countdown": 15.0
+        }
+        spat_tokens = tokenizer.encode_standard_dict(spat_dict)
+        self.assertEqual(len(spat_tokens), 3)
+        self.assertEqual(spat_tokens[0], tokenizer.SPAT_TOKEN)
+
+        # ETSI DENM Dict
+        denm_dict = {
+            "messageId": "DENM",
+            "cause": "HARD_BRAKING",
+            "speed": 80.0,
+            "heading": 45.0
+        }
+        denm_tokens = tokenizer.encode_standard_dict(denm_dict)
+        self.assertEqual(len(denm_tokens), 4)
+        self.assertEqual(denm_tokens[0], tokenizer.DENM_TOKEN)
+
     def test_int8_quantization(self):
         model = load_model(pretrained=False, device="cpu")
         quant_model = model.quantize_int8()

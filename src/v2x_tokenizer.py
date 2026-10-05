@@ -155,6 +155,50 @@ class V2XTokenizer:
         cause_token = self.DENM_CAUSES.get(cause_code, self.DENM_CAUSES["ROAD_HAZARD"])
         return [self.DENM_TOKEN, cause_token, self.tokenize_speed(speed), self.tokenize_heading(heading)]
 
+    def encode_standard_dict(self, msg_dict: dict) -> list:
+        """
+        Encodes a standard ASN.1-derived dictionary payload into tokens.
+        Supports:
+          - SAE J2735 BSM: {'messageId': 'BSM', 'speed': float, 'accel': float, 'heading': float, 'dx': float, 'dy': float, 'brake': int, 'abs': int}
+          - ETSI CAM:      {'messageId': 'CAM', 'speed': float, 'accel': float, 'heading': float, 'dx': float, 'dy': float, 'light': int}
+          - SAE SPaT:     {'messageId': 'SPAT', 'phase': str, 'countdown': float}
+          - ETSI DENM:     {'messageId': 'DENM', 'cause': str, 'speed': float, 'heading': float}
+        """
+        msg_type = str(msg_dict.get("messageId", "BSM")).upper()
+
+        if msg_type == "BSM":
+            return self.encode_bsm(
+                speed=float(msg_dict.get("speed", 0.0)),
+                accel=float(msg_dict.get("accel", 0.0)),
+                heading=float(msg_dict.get("heading", 0.0)),
+                dx=float(msg_dict.get("dx", 0.0)),
+                dy=float(msg_dict.get("dy", 0.0)),
+                brake=int(msg_dict.get("brake", 0)),
+                abs_flag=int(msg_dict.get("abs", 0))
+            )
+        elif msg_type == "CAM":
+            return self.encode_cam(
+                speed=float(msg_dict.get("speed", 0.0)),
+                accel=float(msg_dict.get("accel", 0.0)),
+                heading=float(msg_dict.get("heading", 0.0)),
+                dx=float(msg_dict.get("dx", 0.0)),
+                dy=float(msg_dict.get("dy", 0.0)),
+                light_status=int(msg_dict.get("light", 0))
+            )
+        elif msg_type == "SPAT":
+            return self.encode_spat(
+                signal_phase=str(msg_dict.get("phase", "RED")),
+                time_to_change_sec=float(msg_dict.get("countdown", 10.0))
+            )
+        elif msg_type == "DENM":
+            return self.encode_denm(
+                cause_code=str(msg_dict.get("cause", "ROAD_HAZARD")),
+                speed=float(msg_dict.get("speed", 0.0)),
+                heading=float(msg_dict.get("heading", 0.0))
+            )
+        else:
+            return [self.UNK_TOKEN]
+
     def encode_sequence(self, message_token_lists: list, max_len: int = 64):
         """
         Packages multiple consecutive V2X frames into a unified BERT input sequence.
