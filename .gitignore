@@ -10,3 +10,5 @@ build/
 .idea/
 *.log
 data/dair-v2x/
+data/*.npz
+data/veremi/securecomm2018/

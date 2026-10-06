@@ -291,7 +291,62 @@ def split_by_scenario_disjoint(full_dataset: V2XDataset, test_ratio: float = 0.2
     )
 
     overlap_sc = len(set(train_ds.scenario_ids).intersection(set(test_ds.scenario_ids)))
-    overlap_snd = len(set(train_ds.sender_ids).intersection(set(test_ds.sender_ids)))
     assert overlap_sc == 0, f"FATAL DATA LEAKAGE: {overlap_sc} scenarios in both train and test!"
 
     return train_ds, test_ds
+
+
+def assert_no_scenario_overlap(train_dataset: V2XDataset, test_dataset: V2XDataset) -> bool:
+    """
+    Formally verifies zero scenario ID overlap between training and testing partitions.
+    """
+    train_scenarios = set(train_dataset.scenario_ids)
+    test_scenarios = set(test_dataset.scenario_ids)
+    overlap = train_scenarios.intersection(test_scenarios)
+    if len(overlap) > 0:
+        raise AssertionError(f"Scenario leakage detected! Overlapping scenarios ({len(overlap)}): {overlap}")
+    return True
+
+
+def assert_no_sender_overlap(train_dataset: V2XDataset, test_dataset: V2XDataset) -> bool:
+    """
+    Formally verifies zero sender StationID overlap between training and testing partitions.
+    """
+    train_senders = set(train_dataset.sender_ids)
+    test_senders = set(test_dataset.sender_ids)
+    overlap = train_senders.intersection(test_senders)
+    if len(overlap) > 0:
+        raise AssertionError(f"Sender leakage detected! Overlapping senders ({len(overlap)}): {overlap}")
+    return True
+
+
+def get_dataset_provenance(veremi_dir="data/veremi/securecomm2018", cache_path="data/real_veremi_cache.npz") -> dict:
+    """
+    Computes cryptographic hash and extraction metadata for the real VeReMi dataset.
+    """
+    import hashlib
+    root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    resolved_cache = cache_path if os.path.isabs(cache_path) else os.path.join(root_dir, cache_path)
+
+    dataset_hash = "UNKNOWN"
+    total_seqs = 0
+    if os.path.exists(resolved_cache):
+        hasher = hashlib.sha256()
+        with open(resolved_cache, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                hasher.update(chunk)
+        dataset_hash = hasher.hexdigest()
+        cache = np.load(resolved_cache, allow_pickle=True)
+        total_seqs = len(cache["sequences"])
+
+    resolved_veremi = veremi_dir if os.path.isabs(veremi_dir) else os.path.join(root_dir, veremi_dir)
+    archives = sorted(glob.glob(os.path.join(resolved_veremi, "*.tgz")))
+
+    return {
+        "dataset_name": "VeReMi (Vehicle Reference Misbehavior Dataset)",
+        "dataset_version": "SecureComm 2018 Official Release",
+        "archive_count": len(archives),
+        "total_cached_sequences": total_seqs,
+        "sha256_hash": dataset_hash,
+        "cache_path": cache_path
+    }

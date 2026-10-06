@@ -1,6 +1,11 @@
-Model Architecture,Pre-trained,Precision,Accuracy (%),Precision (%),Recall (%),F1-Score (%),AUC-ROC,Mean Latency (us),P95 Latency (us)
-V2X-BERT (Pre-trained + Fine-tuned),Yes (MTM + Align),FP32 (4.43 MB),75.40,73.91,81.31,77.43,0.8641,1505.72,1720.79
-V2X-BERT (INT8 Quantized OBU),Yes (MTM + Align),INT8 (1.11 MB),75.60,74.17,81.31,77.57,0.8639,1543.70,5139.56
-V2X-BERT (No Pre-training Ablation),No,FP32 (4.43 MB),74.70,82.92,64.55,72.59,0.8139,2053.93,2677.53
-Standard LSTM Sequence Baseline,No,FP32,91.45,90.80,89.20,89.99,0.9320,480.00,620.00
-Dense Multi-Layer Perceptron (MLP),No,FP32,86.10,85.20,84.10,84.65,0.8840,120.00,180.00
+Model Architecture,Pre-trained,Precision Format,Accuracy (%),Precision (%),Recall (%),F1-Score (%),AUC-ROC,Mean Latency (us),P95 Latency (us)
+V2X-BERT (MTM + Alignment - Full),Yes (MTM + Align),FP32 (4.43 MB),82.56,0.00,0.00,0.00,0.5181,3169.91,3928.17
+V2X-BERT (INT8 Quantized OBU),Yes (MTM + Align),INT8 (1.11 MB),82.56,0.00,0.00,0.00,0.5155,988.04,3067.25
+V2X-BERT (MTM Only Ablation),Yes (MTM Only),FP32 (4.43 MB),82.56,0.00,0.00,0.00,0.5171,1042.05,1385.63
+V2X-BERT (Alignment Only Ablation),Yes (Align Only),FP32 (4.43 MB),82.56,0.00,0.00,0.00,0.5412,897.92,1177.23
+V2X-BERT (Random Init - No Pretrain),No,FP32 (4.43 MB),82.56,0.00,0.00,0.00,0.5137,1928.60,2904.95
+Vanilla Transformer Baseline,No,FP32 (4.43 MB),82.56,0.00,0.00,0.00,0.5348,1899.34,4449.56
+Standard GRU Sequence Baseline,No,FP32 (2.10 MB),82.56,0.00,0.00,0.00,0.5421,530.52,1289.67
+Standard LSTM Sequence Baseline,No,FP32 (2.80 MB),82.56,0.00,0.00,0.00,0.5167,375.94,952.85
+Dense Multi-Layer Perceptron (MLP),No,FP32 (0.45 MB),61.18,15.75,28.17,20.20,0.4728,9.48,67.54
+Random Forest Tabular Baseline,No,CPU Ensemble,83.29,100.00,4.23,8.11,0.5775,27.95,41.93

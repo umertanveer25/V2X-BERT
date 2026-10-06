@@ -1,7 +1,8 @@
 """
-DAIR-V2X Real-World Vehicle-Infrastructure Cooperative Telemetry Ingestion Engine for V2X-BERT.
-Supports Vehicle-Side (VIC) and Infrastructure-Side (RSU) multi-agent cooperative message streams
-conforming to DAIR-V2X schema and ETSI CPM / SAE J2735 specifications.
+Synthetic Cooperative V2X Stress-Test Corpus (Simulation).
+Models multi-agent Vehicle (VIC) and Roadside Infrastructure (RSU) cooperative telemetry streams
+for stress-testing V2X-BERT under simulated time desynchronization, ghost obstacle injection, and GPS drift.
+NOTE: This is an exploratory simulation corpus and is NOT the official DAIR-V2X empirical dataset.
 """
 
 import os
@@ -13,9 +14,9 @@ from torch.utils.data import Dataset
 from .v2x_tokenizer import V2XTokenizer
 
 
-class DAIRV2XCooperativeDataset(Dataset):
+class SyntheticCooperativeDataset(Dataset):
     """
-    Dataset representing paired Vehicle (VIC) and Roadside Infrastructure (RSU) cooperative telemetry frames.
+    Dataset representing simulated paired Vehicle (VIC) and Roadside Infrastructure (RSU) cooperative telemetry frames.
     """
     def __init__(self, sequences, attention_masks, labels, coop_types, stream_sources, max_len=64):
         self.sequences = torch.tensor(sequences, dtype=torch.long)
@@ -32,15 +33,19 @@ class DAIRV2XCooperativeDataset(Dataset):
         return self.sequences[idx], self.attention_masks[idx], self.labels[idx]
 
 
-def generate_dair_v2x_cooperative_corpus(
+# Alias for backward compatibility
+DAIRV2XCooperativeDataset = SyntheticCooperativeDataset
+
+
+def generate_synthetic_cooperative_corpus(
     num_samples=3000,
     seq_len=5,
     window_tokens=64,
     seed=42
 ):
     """
-    Generates a high-fidelity DAIR-V2X cooperative telemetry corpus modeling real-world
-    infrastructure-vehicle fusion, cooperative perception message (CPM) broadcasts, and roadside anomaly injection.
+    Generates a synthetic cooperative V2X stress-test corpus modeling simulated
+    infrastructure-vehicle fusion, cooperative perception messages (CPM), and roadside anomaly injection.
     """
     np.random.seed(seed)
     tokenizer = V2XTokenizer()
@@ -60,9 +65,6 @@ def generate_dair_v2x_cooperative_corpus(
         vic_dx = np.random.uniform(-40.0, 40.0)
         vic_dy = np.random.uniform(-40.0, 40.0)
 
-        # RSU Infrastructure Observer baseline (Fixed intersection station)
-        rsu_distance = math.sqrt(vic_dx**2 + vic_dy**2)
-
         msg_list = []
 
         # 1. RSU Infrastructure Header & SPaT Broadcast
@@ -77,20 +79,17 @@ def generate_dair_v2x_cooperative_corpus(
             cur_accel = vic_accel + noise_acc
             cur_speed = max(0.0, vic_speed + cur_accel * dt * 3.6)
 
-            # Apply DAIR-V2X Anomaly / Corruption
+            # Apply Simulated Anomaly / Corruption
             if is_corrupted:
                 if anomaly_name == "RSU_GhostObject":
-                    # Infrastructure reports false obstacle
                     obs_dx = vic_dx + np.random.uniform(25.0, 50.0)
                     obs_dy = vic_dy + np.random.uniform(25.0, 50.0)
                     obs_speed = cur_speed
                 elif anomaly_name == "VIC_PositionDrift":
-                    # Vehicle GPS drifts away from RSU radar perception
                     obs_dx = vic_dx + np.random.uniform(30.0, 60.0)
                     obs_dy = vic_dy
                     obs_speed = cur_speed
                 elif anomaly_name == "Coop_TimeDesync":
-                    # Stale delayed frame replay
                     obs_dx = vic_dx
                     obs_dy = vic_dy
                     obs_speed = max(0.0, cur_speed - 15.0)
@@ -124,7 +123,7 @@ def generate_dair_v2x_cooperative_corpus(
         masks.append(seq_mask.numpy())
         labels.append(is_corrupted)
         coop_types.append(anomaly_name)
-        stream_sources.append("DAIR-V2X_VIC_RSU_Fusion")
+        stream_sources.append("Synthetic_Cooperative_VIC_RSU_Stream")
 
     return (
         np.array(sequences),
@@ -135,28 +134,33 @@ def generate_dair_v2x_cooperative_corpus(
     )
 
 
-def load_dair_v2x_dataset(
-    data_dir=None,
+# Alias
+generate_dair_v2x_cooperative_corpus = generate_synthetic_cooperative_corpus
+
+
+def load_synthetic_cooperative_dataset(
     num_samples=3000,
     seq_len=5,
     window_tokens=64,
-    test_ratio=0.20
+    test_ratio=0.20,
+    seed=42
 ):
     """
-    Loads DAIR-V2X Cooperative Perception & Infrastructure Message sequences.
+    Loads Synthetic Cooperative Perception & Infrastructure Message sequences.
     Partitions into strictly disjoint Train and Held-Out Test sets.
     """
-    seqs, masks, labels, coop_types, sources = generate_dair_v2x_cooperative_corpus(
+    seqs, masks, labels, coop_types, sources = generate_synthetic_cooperative_corpus(
         num_samples=num_samples,
         seq_len=seq_len,
-        window_tokens=window_tokens
+        window_tokens=window_tokens,
+        seed=seed
     )
 
     n_total = len(seqs)
     n_test = int(n_total * test_ratio)
     n_train = n_total - n_test
 
-    train_ds = DAIRV2XCooperativeDataset(
+    train_ds = SyntheticCooperativeDataset(
         seqs[:n_train],
         masks[:n_train],
         labels[:n_train],
@@ -165,7 +169,7 @@ def load_dair_v2x_dataset(
         max_len=window_tokens
     )
 
-    test_ds = DAIRV2XCooperativeDataset(
+    test_ds = SyntheticCooperativeDataset(
         seqs[n_train:],
         masks[n_train:],
         labels[n_train:],
@@ -174,10 +178,14 @@ def load_dair_v2x_dataset(
         max_len=window_tokens
     )
 
-    print(f"\n{'='*75}")
-    print(f"   DAIR-V2X COOPERATIVE VEHICLE-INFRASTRUCTURE DATASET LOADED")
-    print(f"   Total Sequences: {n_total:,} | Train: {n_train:,} | Held-Out Test: {n_test:,}")
-    print(f"   Stream Types: Vehicle (VIC) BSMs + Roadside Unit (RSU) SPaT/CPM Fusion")
-    print(f"{'='*75}\n")
+    print(f"\n{'='*75}", flush=True)
+    print(f"   SYNTHETIC COOPERATIVE V2X STRESS-TEST CORPUS LOADED (SIMULATION)", flush=True)
+    print(f"   Total Sequences: {n_total:,} | Train: {n_train:,} | Held-Out Test: {n_test:,}", flush=True)
+    print(f"   Stream Types: Vehicle (VIC) BSMs + Roadside Unit (RSU) SPaT/CPM Fusion Simulation", flush=True)
+    print(f"{'='*75}\n", flush=True)
 
     return train_ds, test_ds
+
+
+# Alias
+load_dair_v2x_dataset = load_synthetic_cooperative_dataset

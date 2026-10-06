@@ -83,9 +83,21 @@ def compute_sae_etsi_contrastive_loss(z_sae, z_etsi, temperature=0.07):
     return (loss_sae_to_etsi + loss_etsi_to_sae) / 2.0
 
 
-def pretrain_v2x_bert(model, dataset, epochs=5, batch_size=128, lr=1e-3, lambda_align=0.1, device="cpu"):
+def pretrain_v2x_bert(
+    model,
+    dataset,
+    epochs=2,
+    batch_size=128,
+    lr=1e-3,
+    lambda_mtm=1.0,
+    lambda_align=0.1,
+    device="cpu"
+):
     """
-    Executes Joint Masked Telemetry Modeling (MTM) and SAE vs. ETSI Cross-Standard Alignment Pre-training.
+    Executes Self-Supervised Pre-training for V2X-BERT supporting:
+      - Full Joint Pre-training: lambda_mtm=1.0, lambda_align=0.1
+      - MTM Only Ablation: lambda_mtm=1.0, lambda_align=0.0
+      - Alignment Only Ablation: lambda_mtm=0.0, lambda_align=1.0
     """
     model.to(device)
     tokenizer = V2XTokenizer()
@@ -93,11 +105,11 @@ def pretrain_v2x_bert(model, dataset, epochs=5, batch_size=128, lr=1e-3, lambda_
     criterion_mtm = nn.CrossEntropyLoss(ignore_index=-100)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 
-    print(f"\n{'='*75}")
-    print(f"   V2X-BERT: SELF-SUPERVISED MASKED TELEMETRY PRE-TRAINING ({device.upper()})")
-    print(f"   Trainable Parameters: {model.count_parameters():,} ({model.count_parameters()/1e6:.2f}M)")
-    print(f"   Objective: MTM + {lambda_align} * Cross-Standard (SAE J2735 vs. ETSI CAM) Contrastive Loss")
-    print(f"{'='*75}")
+    print(f"\n{'='*75}", flush=True)
+    print(f"   V2X-BERT: SELF-SUPERVISED PRE-TRAINING ({device.upper()})", flush=True)
+    print(f"   Trainable Parameters: {model.count_parameters():,} ({model.count_parameters()/1e6:.2f}M)", flush=True)
+    print(f"   Objective: {lambda_mtm} * MTM + {lambda_align} * Cross-Standard (SAE-BSM <-> ETSI-CAM) Contrastive Loss", flush=True)
+    print(f"{'='*75}", flush=True)
 
     history = []
     start_time = time.time()
@@ -119,37 +131,45 @@ def pretrain_v2x_bert(model, dataset, epochs=5, batch_size=128, lr=1e-3, lambda_
             batch_seqs = batch_seqs.to(device)
             batch_masks = batch_masks.to(device)
 
-            # 1. SAE J2735 View (Masked Telemetry Modeling)
-            masked_sae, target_labels = mask_telemetry_tokens(batch_seqs, tokenizer, mask_prob=0.15)
-            logits_sae, z_sae = model.forward_pretrain(masked_sae, attention_mask=batch_masks)
-            loss_mtm = criterion_mtm(logits_sae.view(-1, tokenizer.vocab_size), target_labels.view(-1))
+            loss = torch.tensor(0.0, device=device)
+            loss_mtm_val = 0.0
+            loss_align_val = 0.0
 
-            # 2. ETSI CAM View (Cross-Standard Semantic Counterpart)
-            etsi_seqs = map_sae_to_etsi_view(batch_seqs, tokenizer)
-            _, z_etsi = model.forward_pretrain(etsi_seqs, attention_mask=batch_masks)
+            # 1. Masked Telemetry Modeling (MTM)
+            if lambda_mtm > 0:
+                masked_sae, target_labels = mask_telemetry_tokens(batch_seqs, tokenizer, mask_prob=0.15)
+                logits_sae, z_sae = model.forward_pretrain(masked_sae, attention_mask=batch_masks)
+                loss_mtm = criterion_mtm(logits_sae.view(-1, tokenizer.vocab_size), target_labels.view(-1))
+                loss = loss + lambda_mtm * loss_mtm
+                loss_mtm_val = loss_mtm.item()
+            else:
+                _, z_sae = model.forward_pretrain(batch_seqs, attention_mask=batch_masks)
 
-            # 3. Cross-Standard Contrastive Alignment Loss (SAE J2735 <-> ETSI CAM)
-            loss_align = compute_sae_etsi_contrastive_loss(z_sae, z_etsi)
+            # 2. Cross-Standard Contrastive Alignment (SAE J2735 <-> ETSI CAM)
+            if lambda_align > 0:
+                etsi_seqs = map_sae_to_etsi_view(batch_seqs, tokenizer)
+                _, z_etsi = model.forward_pretrain(etsi_seqs, attention_mask=batch_masks)
+                loss_align = compute_sae_etsi_contrastive_loss(z_sae, z_etsi)
+                loss = loss + lambda_align * loss_align
+                loss_align_val = loss_align.item()
 
-            # Combined Objective
-            loss = loss_mtm + lambda_align * loss_align
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
             total_loss += loss.item()
-            total_mtm_loss += loss_mtm.item()
-            total_align_loss += loss_align.item()
+            total_mtm_loss += loss_mtm_val
+            total_align_loss += loss_align_val
             total_batches += 1
 
         avg_loss = total_loss / max(1, total_batches)
         avg_mtm = total_mtm_loss / max(1, total_batches)
         avg_align = total_align_loss / max(1, total_batches)
-        perplexity = float(np.exp(min(avg_mtm, 20.0)))
+        perplexity = float(np.exp(min(avg_mtm if lambda_mtm > 0 else avg_loss, 20.0)))
         elapsed = time.time() - start_time
 
-        print(f" [Epoch {epoch:02d}/{epochs:02d}] Total Loss: {avg_loss:.4f} (MTM: {avg_mtm:.4f}, SAE-ETSI Align: {avg_align:.4f}) | Perplexity: {perplexity:.2f} | Time: {elapsed:.1f}s")
+        print(f" [Epoch {epoch:02d}/{epochs:02d}] Total Loss: {avg_loss:.4f} (MTM: {avg_mtm:.4f}, SAE-ETSI Align: {avg_align:.4f}) | Perplexity: {perplexity:.2f} | Time: {elapsed:.1f}s", flush=True)
         history.append({
             "epoch": epoch,
             "total_loss": float(avg_loss),
@@ -159,6 +179,6 @@ def pretrain_v2x_bert(model, dataset, epochs=5, batch_size=128, lr=1e-3, lambda_
         })
 
     total_time = time.time() - start_time
-    print(f"{'='*75}")
-    print(f" [Pre-training Complete] Model converged in {total_time:.2f} seconds.")
+    print(f"{'='*75}", flush=True)
+    print(f" [Pre-training Complete] Model converged in {total_time:.2f} seconds.", flush=True)
     return history

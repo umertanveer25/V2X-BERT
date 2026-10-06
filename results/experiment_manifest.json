@@ -1,0 +1,32 @@
+{
+  "git_commit": "8d4e1e97b02ba38f018a49eb0a536fbcdee1f089",
+  "dataset": "VeReMi (Vehicle Reference Misbehavior Dataset)",
+  "dataset_version": "SecureComm 2018 Official Release",
+  "dataset_hash": "d925fecdd620160c46f062cff63069fac8b635b4a8614f3952c2c7e5ad543a62",
+  "archives_used": 30,
+  "sequences_total": 1500,
+  "sequences_train": 1093,
+  "sequences_test": 407,
+  "seed": 42,
+  "split_method": "Scenario-Disjoint (Held-Out Simulation Scenarios)",
+  "pretrain_epochs": 2,
+  "finetune_epochs": 2,
+  "batch_size": 128,
+  "model_config": {
+    "vocab_size": 1024,
+    "d_model": 128,
+    "n_heads": 4,
+    "num_layers": 4,
+    "d_ff": 512,
+    "max_len": 64,
+    "parameters": 1106882,
+    "fp32_mb": 4.222419738769531,
+    "int8_mb": 1.0556049346923828
+  },
+  "device": "cpu",
+  "hardware_platform": "Windows-11-10.0.26200-SP0",
+  "processor": "Intel64 Family 6 Model 154 Stepping 3, GenuineIntel",
+  "python_version": "3.13.14",
+  "torch_version": "2.9.1+cpu",
+  "timestamp": "2026-10-06T08:49:44Z"
+}

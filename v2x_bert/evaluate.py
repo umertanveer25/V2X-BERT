@@ -7,7 +7,8 @@ from src.evaluate_downstream import (
     train_and_evaluate_baseline,
     LSTMSequenceClassifier,
     GRUSequenceClassifier,
-    DenseMLPClassifier
+    DenseMLPClassifier,
+    VanillaTransformerClassifier
 )
 
 __all__ = [
@@ -16,5 +17,6 @@ __all__ = [
     "train_and_evaluate_baseline",
     "LSTMSequenceClassifier",
     "GRUSequenceClassifier",
-    "DenseMLPClassifier"
+    "DenseMLPClassifier",
+    "VanillaTransformerClassifier"
 ]
