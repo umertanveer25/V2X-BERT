@@ -20,7 +20,7 @@ Vehicle-to-Everything (V2X) communications form the cyber-physical backbone of C
 2. **Ultra-Compact Edge-Native Footprint:** Parameter budget of exactly **$1,106,882$ parameters** ($\approx 1.11\,\text{M}$), occupying **$4.22\,\text{MB}$ in FP32** and **$1.06\,\text{MB}$ in INT8 dynamic quantization**—readily deployable on automotive Electronic Control Units (ECUs) and On-Board Units (OBUs).
 3. **Self-Supervised Masked Telemetry Modeling (MTM):** Learns physical vehicle dynamics by reconstructing artificially masked telemetry slots ($80/10/10$ BERT rule).
 4. **Cross-Standard Latent Alignment:** Employs an InfoNCE contrastive projection head to map transatlantic SAE J2735 and European ETSI frames into a unified geometric representation.
-5. **Zero-Leakage Benchmark Protocol:** Evaluated under strictly **scenario-disjoint and sender-disjoint splits** with automated assertion guards across the standardized **VeReMi** dataset and a simulated multi-agent cooperative perception stress-test corpus.
+5. **Zero-Leakage Benchmark Protocol:** Evaluated under strictly **scenario-disjoint and sender-disjoint splits** ($N=3$ seeds: 42, 43, 44) with automated assertion guards across the standardized **VeReMi** dataset and a simulated multi-agent cooperative perception stress-test corpus.
 
 ---
 
@@ -67,7 +67,7 @@ Vehicle-to-Everything (V2X) communications form the cyber-physical backbone of C
   |  5. DOWNSTREAM ZERO-TRUST MISBEHAVIOR DETECTION                                               |
   |     - Multi-Class Threat Classification: Position Falsification, Speed Disruption, Sudden     |
   |       Braking Ghost Injections, Sybil Attacks, and Sensor Desync                              |
-  |     - Disjoint Scenario & Sender Validation (Zero Data Leakage)                               |
+  |     - Disjoint Scenario & Sender Validation (Zero Data Leakage, Multi-Seed Aggregation)       |
   +-----------------------------------------------------------------------------------------------+
 ```
 
@@ -75,21 +75,21 @@ Vehicle-to-Everything (V2X) communications form the cyber-physical backbone of C
 
 ## 📊 Comprehensive Experimental Benchmark Results
 
-### Table 1: VeReMi Empirical Benchmark Comparison (Scenario-Disjoint Split)
-*Full empirical evaluation against sequence and classical baselines on authentic VeReMi vehicular message logs (SHA-256 provenance verified).*
+### Table 1: VeReMi Empirical Multi-Seed Benchmark Comparison (Scenario-Disjoint Split)
+*Full empirical evaluation across $N=3$ evaluation seeds (42, 43, 44) against sequence and classical baselines on authentic VeReMi vehicular message logs. Values reported as $\text{Mean} \pm \text{SD}$.*
 
 | Model Architecture | Pre-trained | Precision Format | Accuracy (%) | Precision (%) | Recall (%) | F1-Score (%) | AUC-ROC | Mean Latency ($\mu\text{s}$) | P95 Latency ($\mu\text{s}$) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **V2X-BERT (MTM + Alignment - Full)** | **Yes (MTM + Align)** | **FP32 (4.22 MB)** | **82.56** | **0.00** | **0.00** | **0.00** | **0.5181** | **3,169.91** | **3,928.17** |
-| **V2X-BERT (INT8 Quantized OBU)** | **Yes (MTM + Align)** | **INT8 (1.06 MB)** | **82.56** | **0.00** | **0.00** | **0.00** | **0.5155** | **988.04** | **3,067.25** |
-| **V2X-BERT (MTM Only Ablation)** | Yes (MTM Only) | FP32 (4.22 MB) | 82.56 | 0.00 | 0.00 | 0.00 | 0.5171 | 1,042.05 | 1,385.63 |
-| **V2X-BERT (Alignment Only Ablation)** | Yes (Align Only) | FP32 (4.22 MB) | 82.56 | 0.00 | 0.00 | 0.00 | 0.5412 | 897.92 | 1,177.23 |
-| **V2X-BERT (Random Init - No Pretrain)** | No | FP32 (4.22 MB) | 82.56 | 0.00 | 0.00 | 0.00 | 0.5137 | 1,928.60 | 2,904.95 |
-| **Vanilla Transformer Baseline** | No | FP32 (4.22 MB) | 82.56 | 0.00 | 0.00 | 0.00 | 0.5348 | 1,899.34 | 4,449.56 |
-| **Standard GRU Sequence Baseline** | No | FP32 (2.10 MB) | 82.56 | 0.00 | 0.00 | 0.00 | 0.5421 | 530.52 | 1,289.67 |
-| **Standard LSTM Sequence Baseline** | No | FP32 (2.80 MB) | 82.56 | 0.00 | 0.00 | 0.00 | 0.5167 | 375.94 | 952.85 |
-| **Dense Multi-Layer Perceptron (MLP)** | No | FP32 (0.45 MB) | 61.18 | 15.75 | 28.17 | 20.20 | 0.4728 | 9.48 | 67.54 |
-| **Random Forest Tabular Baseline** | No | CPU Ensemble | 83.29 | 100.00 | 4.23 | 8.11 | 0.5775 | 27.95 | 41.93 |
+| **V2X-BERT (MTM + Alignment - Full)** | **Yes (MTM + Align)** | **FP32 (4.22 MB)** | **80.80 ± 1.80** | **0.00** | **0.00** | **0.00** | **0.5503 ± 0.0220** | **3,552.98 ± 1,407.04** | **5,584.08 ± 2,745.67** |
+| **V2X-BERT (INT8 Quantized OBU)** | **Yes (MTM + Align)** | **INT8 (1.06 MB)** | **80.80 ± 1.80** | **0.00** | **0.00** | **0.00** | **0.5507 ± 0.0200** | **2,908.33 ± 2,046.62** | **5,511.12 ± 5,374.24** |
+| **V2X-BERT (MTM Only Ablation)** | Yes (MTM Only) | FP32 (4.22 MB) | 80.80 ± 1.80 | 0.00 | 0.00 | 0.00 | 0.5209 ± 0.0383 | 2,363.56 ± 1,368.10 | 2,766.13 ± 1,565.50 |
+| **V2X-BERT (Alignment Only Ablation)** | Yes (Align Only) | FP32 (4.22 MB) | 80.56 ± 2.12 | 0.00 | 0.00 | 0.00 | 0.5109 ± 0.0221 | 2,664.94 ± 915.42 | 4,347.28 ± 1,115.74 |
+| **V2X-BERT (Random Init - No Pretrain)** | No | FP32 (4.22 MB) | 80.80 ± 1.80 | 0.00 | 0.00 | 0.00 | 0.5118 ± 0.0193 | 2,120.68 ± 404.01 | 2,971.27 ± 663.38 |
+| **Vanilla Transformer Baseline** | No | FP32 (4.22 MB) | 80.80 ± 1.80 | 0.00 | 0.00 | 0.00 | 0.5507 ± 0.0218 | 3,125.09 ± 1,277.01 | 3,391.52 ± 1,281.94 |
+| **Standard GRU Sequence Baseline** | No | FP32 (2.10 MB) | 80.80 ± 1.80 | 0.00 | 0.00 | 0.00 | 0.5021 ± 0.0489 | 711.52 ± 81.20 | 1,375.45 ± 361.60 |
+| **Standard LSTM Sequence Baseline** | No | FP32 (2.80 MB) | 80.80 ± 1.80 | 0.00 | 0.00 | 0.00 | 0.5404 ± 0.0319 | 614.50 ± 198.19 | 1,704.64 ± 906.86 |
+| **Dense Multi-Layer Perceptron (MLP)** | No | FP32 (0.45 MB) | 70.78 ± 7.15 | 10.92 ± 7.74 | 13.43 ± 11.54 | 11.45 ± 8.47 | 0.4630 ± 0.0123 | 6.62 ± 1.70 | 27.25 ± 23.63 |
+| **Random Forest Tabular Baseline** | No | CPU Ensemble | 81.04 ± 2.06 | 33.33 ± 47.14 | 1.41 ± 1.99 | 2.70 ± 3.82 | 0.5541 ± 0.0281 | 39.89 ± 6.62 | 59.84 ± 9.92 |
 
 ---
 
@@ -181,7 +181,7 @@ python tests/test_v2x_bert.py
 
 ### Option 3: Run Full Pre-Training & Downstream Pipeline
 ```bash
-python experiments/run_v2x_bert_pipeline.py
+python experiments/run_v2x_bert_pipeline.py --seeds 42 43 44
 python experiments/run_dair_v2x_experiment.py
 ```
 
@@ -249,7 +249,7 @@ V2X-BERT/
 │   ├── SAE_J2735_2020.asn                 # SAE J2735:2020 standard message set
 │   └── ETSI_CAM_CDD_DENM.asn              # ETSI EN 302 637-2 specifications
 ├── experiments/                           # Experiment Runners & Figure Generators
-│   ├── run_v2x_bert_pipeline.py           # Pre-trains & evaluates VeReMi benchmark
+│   ├── run_v2x_bert_pipeline.py           # Pre-trains & evaluates VeReMi benchmark (Multi-Seed)
 │   ├── run_dair_v2x_experiment.py         # Executes Cooperative stress-test benchmark
 │   └── generate_v2x_bert_figures.py       # Generates Figures 1 - 6 (300 DPI)
 ├── tests/                                 # Unit & Integration Test Suite
