@@ -1,8 +1,8 @@
 {
-  "git_commit": "daaf70a6b6e9fe1983522dd7c1d32adf11e8e129",
+  "git_commit": "63ef6f829248e19acc61f7c29e83a038fc17561e",
   "dataset": "VeReMi (Vehicle Reference Misbehavior Dataset)",
   "dataset_version": "SecureComm 2018 Official Release",
-  "dataset_hash": "d925fecdd620160c46f062cff63069fac8b635b4a8614f3952c2c7e5ad543a62",
+  "dataset_hash": "16334353505fd8e3f7c0c49d369fd2cef4fd553bbca6fe0610cbd840cdb98896",
   "archives_used": 30,
   "sequences_total": 1500,
   "sequences_train": 1143,
@@ -15,8 +15,8 @@
   "num_seeds": 3,
   "split_method": "Scenario-Disjoint (Held-Out Simulation Scenarios)",
   "pretrain_epochs": 2,
-  "finetune_epochs": 2,
-  "batch_size": 128,
+  "finetune_epochs": 3,
+  "batch_size": 64,
   "model_config": {
     "vocab_size": 1024,
     "d_model": 128,
@@ -33,5 +33,5 @@
   "processor": "Intel64 Family 6 Model 154 Stepping 3, GenuineIntel",
   "python_version": "3.13.14",
   "torch_version": "2.9.1+cpu",
-  "timestamp": "2026-10-06T09:17:41Z"
+  "timestamp": "2026-10-06T17:07:21Z"
 }

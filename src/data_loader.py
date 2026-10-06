@@ -144,6 +144,7 @@ def load_real_veremi_dataset(
                     msg_token_list = []
                     prev_speed = 0.0
 
+                    pos0 = window[0].get("pos", [0.0, 0.0, 0.0])
                     for step, msg in enumerate(window):
                         pos = msg.get("pos", [0.0, 0.0, 0.0])
                         spd = msg.get("spd", [0.0, 0.0, 0.0])
@@ -164,9 +165,9 @@ def load_real_veremi_dataset(
                         is_braking = 1 if accel_mps2 < -1.5 else 0
                         abs_active = 1 if accel_mps2 < -4.0 else 0
 
-                        # Positional offset relative to reference origin
-                        dx = float(pos[0]) % 500.0 - 250.0
-                        dy = float(pos[1]) % 500.0 - 250.0
+                        # Relative trajectory offset from start of window
+                        dx = max(-250.0, min(250.0, float(pos[0]) - float(pos0[0])))
+                        dy = max(-250.0, min(250.0, float(pos[1]) - float(pos0[1])))
 
                         bsm_tokens = tokenizer.encode_bsm(
                             speed=speed_kmh,

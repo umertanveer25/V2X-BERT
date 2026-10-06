@@ -95,7 +95,7 @@ def fig1_architecture_schematic():
         ax.annotate("", xy=(x2, 0.5), xytext=(x1, 0.5),
                     arrowprops=dict(arrowstyle="->", lw=2.8, color="#2c3e50"), zorder=1)
 
-    ax.set_title("Figure 1: V2X-BERT Architecture Pipeline (Raw Wire Telemetry to Sub-2ms Edge Verification)",
+    ax.set_title("Figure 1: V2X-BERT Architecture Pipeline (Raw Wire Telemetry to Edge Verification)",
                  fontsize=12.5, fontweight="bold", pad=16)
     plt.tight_layout()
     path = os.path.join(OUTPUT_DIR, "Fig1_V2X_BERT_Architecture_and_Tokenization.png")

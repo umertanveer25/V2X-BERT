@@ -2,14 +2,15 @@
 Downstream Evaluation & Baseline Comparison Engine for V2X-BERT.
 Evaluates Zero-Trust Misbehavior Detection across authentic VeReMi attack scenarios
 with zero pre-training data leakage on strictly scenario-disjoint and sender-disjoint held-out test partitions.
-Includes live, empirically trained baselines (LSTM, GRU, MLP, Random Forest, Vanilla Transformer).
+Includes live, empirically trained baselines (LSTM, GRU, MLP, Random Forest, Vanilla Transformer)
+with balanced cross-entropy weighting and class-balanced sampling to prevent majority-class collapse.
 """
 
 import time
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from sklearn.metrics import (
     accuracy_score,
     precision_score,
@@ -220,19 +221,41 @@ def evaluate_model(model, test_dataset, batch_size=128, device="cpu"):
     }
 
 
-def fine_tune_and_evaluate(model, train_dataset, test_dataset, epochs=2, batch_size=128, lr=3e-4, device="cpu"):
+def fine_tune_and_evaluate(model, train_dataset, test_dataset, epochs=5, batch_size=128, lr=3e-4, device="cpu", use_balanced_loss=True):
     """
     Fine-tunes model on training scenarios and evaluates on strictly held-out test scenarios.
+    Uses class-balanced loss weighting and balanced sampling to prevent majority-class collapse on imbalanced datasets.
     """
     model.to(device)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+    # Class-imbalance mitigation: compute inverse-frequency weights
+    y_train = train_dataset.labels.numpy()
+    n_samples = len(y_train)
+    n_pos = max(1, int(np.sum(y_train == 1)))
+    n_neg = max(1, int(np.sum(y_train == 0)))
+
+    w0 = float(n_samples / (2.0 * n_neg))
+    w1 = float(n_samples / (2.0 * n_pos))
+
+    if use_balanced_loss:
+        criterion = nn.CrossEntropyLoss()
+        sample_weights = np.where(y_train == 1, w1, w0)
+        sampler = WeightedRandomSampler(
+            weights=torch.tensor(sample_weights, dtype=torch.double),
+            num_samples=len(sample_weights),
+            replacement=True
+        )
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, sampler=sampler)
+    else:
+        criterion = nn.CrossEntropyLoss()
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
-    criterion = nn.CrossEntropyLoss()
 
     print(f"\n{'='*75}", flush=True)
     print(f"   FINE-TUNING: {model.__class__.__name__}", flush=True)
-    print(f"   Train Samples: {len(train_dataset):,} | Held-Out Test Samples: {len(test_dataset):,} | Epochs: {epochs}", flush=True)
+    print(f"   Train Samples: {len(train_dataset):,} (Benign: {n_neg:,}, Attack: {n_pos:,})", flush=True)
+    print(f"   Held-Out Test Samples: {len(test_dataset):,} | Epochs: {epochs} | Balanced CE Weighting: {use_balanced_loss}", flush=True)
     print(f"{'='*75}", flush=True)
 
     for epoch in range(1, epochs + 1):
@@ -256,6 +279,7 @@ def fine_tune_and_evaluate(model, train_dataset, test_dataset, epochs=2, batch_s
                 logits, _ = model(batch_x, attention_mask=batch_m)
             loss = criterion(logits, batch_y)
             loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             total_loss += loss.item()
 
@@ -264,9 +288,9 @@ def fine_tune_and_evaluate(model, train_dataset, test_dataset, epochs=2, batch_s
     return evaluate_model(model, test_dataset, batch_size=batch_size, device=device)
 
 
-def train_and_evaluate_baseline(model_type, train_dataset, test_dataset, epochs=2, batch_size=128, device="cpu", seed=42):
+def train_and_evaluate_baseline(model_type, train_dataset, test_dataset, epochs=5, batch_size=128, device="cpu", seed=42):
     """
-    Empirically instantiates, trains, and evaluates a baseline model on the exact disjoint dataset.
+    Empirically instantiates, trains, and evaluates a baseline model on the exact disjoint dataset with class balancing.
     """
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -293,7 +317,7 @@ def train_and_evaluate_baseline(model_type, train_dataset, test_dataset, epochs=
         X_test = test_dataset.sequences.numpy()
         y_test = test_dataset.labels.numpy()
 
-        rf = RandomForestClassifier(n_estimators=50, max_depth=10, random_state=seed, n_jobs=1)
+        rf = RandomForestClassifier(n_estimators=100, max_depth=12, class_weight="balanced", random_state=seed, n_jobs=1)
         rf.fit(X_train, y_train)
 
         # Timed latency over test samples

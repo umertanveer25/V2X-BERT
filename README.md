@@ -16,11 +16,13 @@ Vehicle-to-Everything (V2X) communications form the cyber-physical backbone of C
 **V2X-BERT** is an edge-native, domain-specific bidirectional Transformer foundation model designed specifically for structured vehicular telemetry streams. By tokenizing standard **SAE J2735:2020** (BSM, SPaT, MAP, PSM) and **ETSI EN 302 637-2** (CAM, DENM, CDD) protocols into a compact, discrete semantic vocabulary ($|\mathcal{V}| = 1,024$), V2X-BERT models the temporal grammar, physical kinematic invariants, and cross-standard semantic alignments of vehicular traffic.
 
 ### Key Architectural Highlights:
-1. **Standards-Informed ASN.1 Tokenizer ($|\mathcal{V}| = 1,024$):** Quantizes multi-dimensional continuous kinematics (speed, acceleration, heading, polar spatial neighborhoods) and discrete vehicle flags into semantic tokens.
-2. **Ultra-Compact Edge-Native Footprint:** Parameter budget of exactly **$1,106,882$ parameters** ($\approx 1.11\,\text{M}$), occupying **$4.22\,\text{MB}$ in FP32** and **$1.06\,\text{MB}$ in INT8 dynamic quantization**—readily deployable on automotive Electronic Control Units (ECUs) and On-Board Units (OBUs).
+1. **Standards-Informed ASN.1 Tokenizer ($|\mathcal{V}| = 1,024$):** Quantizes multi-dimensional continuous kinematics (speed, acceleration, heading, relative polar spatial displacements) and discrete vehicle safety flags into semantic tokens.
+2. **Ultra-Compact Edge-Oriented Footprint:** Parameter budget of exactly **$1,106,882$ parameters** ($\approx 1.11\,\text{M}$), occupying **$4.22\,\text{MB}$ in FP32** and **$1.06\,\text{MB}$ in INT8 dynamic quantization**—designed for CPU-constrained edge emulation and embedded automotive controllers.
 3. **Self-Supervised Masked Telemetry Modeling (MTM):** Learns physical vehicle dynamics by reconstructing artificially masked telemetry slots ($80/10/10$ BERT rule).
 4. **Cross-Standard Latent Alignment:** Employs an InfoNCE contrastive projection head to map transatlantic SAE J2735 and European ETSI frames into a unified geometric representation.
 5. **Zero-Leakage Benchmark Protocol:** Evaluated under strictly **scenario-disjoint and sender-disjoint splits** ($N=3$ seeds: 42, 43, 44) with automated assertion guards across the standardized **VeReMi** dataset and a simulated multi-agent cooperative perception stress-test corpus.
+
+> **Dataset Scope Note:** The VeReMi release contains approximately 82,902 available multiframe telemetry sequences; the present computational benchmark uses a controlled, scenario-disjoint 1,500-sequence subset extracted across 30 simulation archives for fast, reproducible multi-seed execution.
 
 ---
 
@@ -44,7 +46,7 @@ Vehicle-to-Everything (V2X) communications form the cyber-physical backbone of C
   |     - Acceleration Bins [128..255]: 128 acceleration bins (-12.0 to +8.0 m/s^2)               |
   |     - Heading Bins [256..327]: 72 angular bins (5° angular resolution)                        |
   |     - Safety Status Bitmasks [328..399]: Brake, ABS, Traction, Stability, Hazard Lights      |
-  |     - Polar Spatial Neighborhood [500..1011]: 512 discrete grid cells (16 tiers x 32 sectors)|
+  |     - Polar Spatial Displacements [500..1011]: 512 discrete grid cells (16 tiers x 32 sectors)|
   +-----------------------------------------------------------------------------------------------+
                                                  │
                                                  ▼
@@ -76,20 +78,20 @@ Vehicle-to-Everything (V2X) communications form the cyber-physical backbone of C
 ## 📊 Comprehensive Experimental Benchmark Results
 
 ### Table 1: VeReMi Empirical Multi-Seed Benchmark Comparison (Scenario-Disjoint Split)
-*Full empirical evaluation across $N=3$ evaluation seeds (42, 43, 44) against sequence and classical baselines on authentic VeReMi vehicular message logs. Values reported as $\text{Mean} \pm \text{SD}$.*
+*Full empirical evaluation across $N=3$ evaluation seeds (42, 43, 44) against sequence and classical baselines on authentic VeReMi vehicular message logs with class-balanced sampling. Values reported as $\text{Mean} \pm \text{SD}$.*
 
 | Model Architecture | Pre-trained | Precision Format | Accuracy (%) | Precision (%) | Recall (%) | F1-Score (%) | AUC-ROC | Mean Latency ($\mu\text{s}$) | P95 Latency ($\mu\text{s}$) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **V2X-BERT (MTM + Alignment - Full)** | **Yes (MTM + Align)** | **FP32 (4.22 MB)** | **80.80 ± 1.80** | **0.00** | **0.00** | **0.00** | **0.5503 ± 0.0220** | **3,552.98 ± 1,407.04** | **5,584.08 ± 2,745.67** |
-| **V2X-BERT (INT8 Quantized OBU)** | **Yes (MTM + Align)** | **INT8 (1.06 MB)** | **80.80 ± 1.80** | **0.00** | **0.00** | **0.00** | **0.5507 ± 0.0200** | **2,908.33 ± 2,046.62** | **5,511.12 ± 5,374.24** |
-| **V2X-BERT (MTM Only Ablation)** | Yes (MTM Only) | FP32 (4.22 MB) | 80.80 ± 1.80 | 0.00 | 0.00 | 0.00 | 0.5209 ± 0.0383 | 2,363.56 ± 1,368.10 | 2,766.13 ± 1,565.50 |
-| **V2X-BERT (Alignment Only Ablation)** | Yes (Align Only) | FP32 (4.22 MB) | 80.56 ± 2.12 | 0.00 | 0.00 | 0.00 | 0.5109 ± 0.0221 | 2,664.94 ± 915.42 | 4,347.28 ± 1,115.74 |
-| **V2X-BERT (Random Init - No Pretrain)** | No | FP32 (4.22 MB) | 80.80 ± 1.80 | 0.00 | 0.00 | 0.00 | 0.5118 ± 0.0193 | 2,120.68 ± 404.01 | 2,971.27 ± 663.38 |
-| **Vanilla Transformer Baseline** | No | FP32 (4.22 MB) | 80.80 ± 1.80 | 0.00 | 0.00 | 0.00 | 0.5507 ± 0.0218 | 3,125.09 ± 1,277.01 | 3,391.52 ± 1,281.94 |
-| **Standard GRU Sequence Baseline** | No | FP32 (2.10 MB) | 80.80 ± 1.80 | 0.00 | 0.00 | 0.00 | 0.5021 ± 0.0489 | 711.52 ± 81.20 | 1,375.45 ± 361.60 |
-| **Standard LSTM Sequence Baseline** | No | FP32 (2.80 MB) | 80.80 ± 1.80 | 0.00 | 0.00 | 0.00 | 0.5404 ± 0.0319 | 614.50 ± 198.19 | 1,704.64 ± 906.86 |
-| **Dense Multi-Layer Perceptron (MLP)** | No | FP32 (0.45 MB) | 70.78 ± 7.15 | 10.92 ± 7.74 | 13.43 ± 11.54 | 11.45 ± 8.47 | 0.4630 ± 0.0123 | 6.62 ± 1.70 | 27.25 ± 23.63 |
-| **Random Forest Tabular Baseline** | No | CPU Ensemble | 81.04 ± 2.06 | 33.33 ± 47.14 | 1.41 ± 1.99 | 2.70 ± 3.82 | 0.5541 ± 0.0281 | 39.89 ± 6.62 | 59.84 ± 9.92 |
+| **V2X-BERT (MTM + Alignment - Full)** | **Yes (MTM + Align)** | **FP32 (4.22 MB)** | **49.47 ± 8.69** | **21.34 ± 5.42** | **57.28 ± 5.16** | **30.76 ± 6.03** | **0.5343 ± 0.0705** | **7,292.36 ± 2,015.22** | **10,824.36 ± 3,180.16** |
+| **V2X-BERT (INT8 Quantized OBU)** | **Yes (MTM + Align)** | **INT8 (1.06 MB)** | **49.48 ± 8.12** | **21.26 ± 5.16** | **57.28 ± 5.16** | **30.70 ± 5.78** | **0.5348 ± 0.0697** | **6,710.14 ± 2,322.84** | **9,106.98 ± 1,945.21** |
+| **V2X-BERT (MTM Only Ablation)** | Yes (MTM Only) | FP32 (4.22 MB) | 71.30 ± 12.26 | 22.59 ± 20.69 | 17.17 ± 19.90 | 12.31 ± 10.43 | 0.5437 ± 0.0363 | 12,696.13 ± 5,802.91 | 21,350.83 ± 10,284.84 |
+| **V2X-BERT (Alignment Only Ablation)** | Yes (Align Only) | FP32 (4.22 MB) | 57.09 ± 1.11 | 17.42 ± 3.27 | 33.24 ± 7.62 | 22.73 ± 4.25 | 0.4861 ± 0.0271 | 4,956.61 ± 2,579.40 | 7,132.77 ± 3,390.96 |
+| **V2X-BERT (Random Init - No Pretrain)** | No | FP32 (4.22 MB) | 48.04 ± 22.89 | 19.16 ± 2.99 | 55.06 ± 35.94 | 23.87 ± 12.50 | 0.5512 ± 0.0079 | 6,255.83 ± 1,192.21 | 6,997.55 ± 1,194.34 |
+| **Vanilla Transformer Baseline** | No | FP32 (4.22 MB) | 56.17 ± 13.93 | 23.24 ± 2.59 | 50.67 ± 23.77 | 29.09 ± 4.78 | 0.5533 ± 0.0234 | 5,244.81 ± 1,187.50 | 7,428.61 ± 1,801.57 |
+| **Standard GRU Sequence Baseline** | No | FP32 (2.10 MB) | 19.20 ± 1.80 | 19.20 ± 1.80 | 100.00 | 32.18 ± 2.52 | 0.5150 ± 0.0175 | 4,307.55 ± 2,482.09 | 8,149.78 ± 5,092.23 |
+| **Standard LSTM Sequence Baseline** | No | FP32 (2.80 MB) | 38.08 ± 28.46 | 11.98 ± 8.48 | 66.67 ± 47.14 | 20.30 ± 14.37 | 0.5024 ± 0.0039 | 2,326.43 ± 342.87 | 4,075.19 ± 1,645.58 |
+| **Dense Multi-Layer Perceptron (MLP)** | No | FP32 (0.45 MB) | 51.26 ± 24.79 | 21.01 ± 6.25 | 46.86 ± 37.59 | 23.96 ± 5.06 | 0.4944 ± 0.0140 | 21.69 ± 6.00 | 61.44 ± 17.94 |
+| **Random Forest Tabular Baseline** | No | CPU Ensemble | 79.38 ± 2.34 | 13.33 ± 18.86 | 2.82 ± 3.98 | 4.65 ± 6.58 | 0.5697 ± 0.0280 | 188.93 ± 26.32 | 283.40 ± 39.48 |
 
 ---
 
