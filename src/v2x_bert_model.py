@@ -42,10 +42,10 @@ class V2XTransformerEncoderBlock(nn.Module):
             nn.Dropout(dropout)
         )
 
-    def forward(self, x, key_padding_mask=None):
+    def forward(self, x, key_padding_mask=None, need_weights=False):
         # Pre-LN Multi-Head Attention
         norm_x = self.ln1(x)
-        attn_out, attn_weights = self.attn(norm_x, norm_x, norm_x, key_padding_mask=key_padding_mask)
+        attn_out, attn_weights = self.attn(norm_x, norm_x, norm_x, key_padding_mask=key_padding_mask, need_weights=need_weights)
         x = x + attn_out
 
         # Pre-LN Feed-Forward
@@ -117,7 +117,7 @@ class EdgeV2XBERT(nn.Module):
         int8_mb = (param_count * 1) / (1024 * 1024)
         return {"parameters": param_count, "fp32_mb": fp32_mb, "int8_mb": int8_mb}
 
-    def forward_encoder(self, input_ids, attention_mask=None):
+    def forward_encoder(self, input_ids, attention_mask=None, return_attentions=False):
         """
         Passes input IDs through token embeddings, position encoding, and encoder stack.
         """
@@ -133,7 +133,7 @@ class EdgeV2XBERT(nn.Module):
 
         all_attentions = []
         for layer in self.layers:
-            x, attn_w = layer(x, key_padding_mask=key_padding_mask)
+            x, attn_w = layer(x, key_padding_mask=key_padding_mask, need_weights=return_attentions)
             all_attentions.append(attn_w)
 
         x = self.final_norm(x)
@@ -146,16 +146,22 @@ class EdgeV2XBERT(nn.Module):
             logits: (batch_size, seq_len, vocab_size)
             cls_proj: (batch_size, 64) normalized latent representation for cross-standard alignment
         """
-        hidden_states, _ = self.forward_encoder(masked_input_ids, attention_mask=attention_mask)
+        hidden_states, _ = self.forward_encoder(masked_input_ids, attention_mask=attention_mask, return_attentions=False)
         logits = self.mtm_head(hidden_states)
         cls_proj = F.normalize(self.cross_standard_proj(hidden_states[:, 0, :]), dim=-1)
         return logits, cls_proj
 
-    def forward_classify(self, input_ids, attention_mask=None):
+    def forward(self, input_ids, attention_mask=None, return_attentions=False):
+        """
+        Default forward pass executes downstream classification.
+        """
+        return self.forward_classify(input_ids, attention_mask=attention_mask, return_attentions=return_attentions)
+
+    def forward_classify(self, input_ids, attention_mask=None, return_attentions=False):
         """
         Downstream Misbehavior Classification using [CLS] representation (token index 0).
         """
-        hidden_states, attentions = self.forward_encoder(input_ids, attention_mask=attention_mask)
+        hidden_states, attentions = self.forward_encoder(input_ids, attention_mask=attention_mask, return_attentions=return_attentions)
         cls_repr = hidden_states[:, 0, :]
         logits = self.classifier_head(cls_repr)
         return logits, attentions

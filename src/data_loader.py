@@ -1,15 +1,15 @@
 """
-Strictly Leakage-Free Sender-Disjoint & Scenario-Disjoint Dataset Loader for V2X-BERT.
-Supports both:
-  1. Sender-Disjoint Split (Vehicle / StationID-Disjoint): Test set consists of completely unseen transmitting vehicles.
-  2. Scenario-Disjoint Split: Test set consists of completely unseen simulation scenarios.
+Strictly Leakage-Free Real VeReMi & Multi-Standard Dataset Loader for V2X-BERT.
+Parses authentic VeReMi (SecureComm 2018) raw simulation archives (.tgz) and generates
+strictly scenario-disjoint and sender-disjoint train/val/test partitions.
 """
 
 import os
-import zipfile
+import tarfile
+import json
+import glob
 import math
 import numpy as np
-import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from .v2x_tokenizer import V2XTokenizer
@@ -36,112 +36,184 @@ class V2XDataset(Dataset):
         return self.sequences[idx], self.attention_masks[idx], self.labels[idx]
 
 
-def generate_benchmark_corpus(
-    num_scenarios=10,
-    sequences_per_scenario=500,
+def load_real_veremi_dataset(
+    veremi_dir="data/veremi/securecomm2018",
+    max_archives=40,
     seq_len=5,
     window_tokens=64,
-    seed=42
+    cache_path="data/real_veremi_cache.npz",
+    force_rebuild=False
 ):
     """
-    Generates a multi-scenario benchmark corpus with distinct environmental dynamics and sender fleets.
-    Each transmitting vehicle has a distinct Sender StationID / Pseudonym.
+    Loads authentic VeReMi (SecureComm 2018) dataset from raw .tgz archives.
+    Parses real BSM frames (type 3), ground truth GPS kinematics (type 2), and attack taxonomy.
+    Attack Types:
+      - A0: Benign (Label 0)
+      - A1: Constant Position Attack (Label 1)
+      - A2: Constant Offset Attack (Label 1)
+      - A4: Random Offset Attack (Label 1)
+      - A8: Delayed / Replay Attack (Label 1)
     """
-    np.random.seed(seed)
+    if os.path.exists(cache_path) and not force_rebuild:
+        print(f"[VeReMi Loader] Loading real VeReMi dataset from cache: {cache_path}")
+        cache = np.load(cache_path, allow_pickle=True)
+        return (
+            cache["sequences"],
+            cache["masks"],
+            cache["labels"],
+            cache["attack_types"].tolist(),
+            cache["sender_ids"].tolist(),
+            cache["scenario_ids"].tolist()
+        )
+
+    print(f"[VeReMi Loader] Parsing authentic raw VeReMi .tgz archives from {veremi_dir}...")
+    archives = sorted(glob.glob(os.path.join(veremi_dir, "*.tgz")))
+    if not archives:
+        # Fallback search if path is relative to project root
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        archives = sorted(glob.glob(os.path.join(root_dir, veremi_dir, "*.tgz")))
+
+    if not archives:
+        raise FileNotFoundError(f"No VeReMi .tgz archives found in {veremi_dir}")
+
     tokenizer = V2XTokenizer()
+    selected_archives = archives[:max_archives]
 
-    scenario_profiles = [
-        {"name": "Scenario_01_Urban_Dense", "speed_range": (10.0, 25.0), "accel_std": 0.8},
-        {"name": "Scenario_02_Highway_Fast", "speed_range": (25.0, 45.0), "accel_std": 0.3},
-        {"name": "Scenario_03_Intersection_Mixed", "speed_range": (5.0, 20.0), "accel_std": 1.2},
-        {"name": "Scenario_04_Arterial_Corridor", "speed_range": (15.0, 30.0), "accel_std": 0.5},
-        {"name": "Scenario_05_Rural_HighSpeed", "speed_range": (20.0, 40.0), "accel_std": 0.4},
-        {"name": "Scenario_06_Roundabout_Flow", "speed_range": (8.0, 18.0), "accel_std": 0.9},
-        {"name": "Scenario_07_Bridge_Merge", "speed_range": (18.0, 32.0), "accel_std": 0.6},
-        {"name": "Scenario_08_Downtown_Grid", "speed_range": (5.0, 15.0), "accel_std": 1.0},
-        {"name": "Scenario_09_HeldOut_AdverseHighway", "speed_range": (22.0, 38.0), "accel_std": 0.5},
-        {"name": "Scenario_10_HeldOut_ComplexIntersection", "speed_range": (4.0, 22.0), "accel_std": 1.4}
-    ]
+    sequences = []
+    masks = []
+    labels = []
+    attack_types = []
+    sender_ids = []
+    scenario_ids = []
 
-    sequences, masks, labels, attack_types = [], [], [], []
-    sender_ids, scenario_ids = [], []
+    attack_name_map = {
+        "A0": "Benign",
+        "A1": "ConstantPosition",
+        "A2": "ConstantOffset",
+        "A4": "RandomOffset",
+        "A8": "DataReplay"
+    }
 
-    attack_names = ["Benign", "SpeedOffset", "DataReplay", "DoSDisrupt", "PosOffset"]
+    for arch_path in selected_archives:
+        # Simulation Scenario ID derived from archive name (e.g., veins_maat.uc1.14505201.180205_165350)
+        arch_base = os.path.basename(arch_path)
+        parts = arch_base.split(".")
+        scenario_id = parts[2] if len(parts) >= 3 else arch_base.replace(".tgz", "")
 
-    for sc_idx, profile in enumerate(scenario_profiles[:num_scenarios]):
-        sc_name = profile["name"]
-        min_spd, max_spd = profile["speed_range"]
-        accel_scale = profile["accel_std"]
+        with tarfile.open(arch_path, "r:gz") as t:
+            for member in t.getmembers():
+                if not (member.name.endswith(".json") and "JSONlog-" in member.name):
+                    continue
 
-        # 50 distinct senders per scenario
-        num_senders = max(1, sequences_per_scenario // 10)
-        for s_idx in range(num_senders):
-            sender_id = f"SENDER_{sc_idx:02d}_{s_idx:03d}"
+                fname = os.path.basename(member.name)
+                # JSONlog-ReceiverID-SenderID-AttackCode.json
+                log_parts = fname.replace(".json", "").split("-")
+                if len(log_parts) < 4:
+                    continue
 
-            # Vehicle trajectory
-            v0 = np.random.uniform(min_spd, max_spd)
-            heading = np.random.uniform(0.0, 360.0)
-            pos_x = np.random.uniform(-500.0, 500.0)
-            pos_y = np.random.uniform(-500.0, 500.0)
+                rcv_id = log_parts[1]
+                snd_id = log_parts[2]
+                atk_code = log_parts[3]
 
-            seqs_for_sender = sequences_per_scenario // num_senders
-            for seq_k in range(seqs_for_sender):
-                is_attack = 1 if np.random.rand() > 0.5 else 0
-                atk_idx = np.random.randint(1, 5) if is_attack else 0
-                atk_type = attack_names[atk_idx]
+                sender_global_id = f"VEH_{scenario_id}_{snd_id}"
+                is_attack = 0 if atk_code == "A0" else 1
+                atk_name = attack_name_map.get(atk_code, f"Attack_{atk_code}")
 
-                msg_list = []
-                for t in range(seq_len):
-                    dt = 0.1
-                    accel = np.random.normal(0.0, accel_scale)
+                f = t.extractfile(member)
+                if f is None:
+                    continue
 
-                    if is_attack:
-                        if atk_type == "SpeedOffset":
-                            v0_obs = v0 + np.random.uniform(15.0, 30.0)
-                        elif atk_type == "PosOffset":
-                            pos_x += np.random.uniform(20.0, 50.0)
-                            v0_obs = v0
-                        elif atk_type == "DoSDisrupt":
-                            accel = -6.0
-                            v0_obs = v0
-                        else:  # DataReplay
-                            v0_obs = max(0.0, v0 - 10.0)
-                    else:
-                        v0_obs = v0
+                bsm_entries = []
+                for line in f:
+                    line_str = line.decode("utf-8", errors="ignore").strip()
+                    if not line_str:
+                        continue
+                    try:
+                        entry = json.loads(line_str)
+                        if entry.get("type") == 3:  # BSM telemetry packet
+                            bsm_entries.append(entry)
+                    except Exception:
+                        continue
 
-                    speed_kmh = max(0.0, v0_obs * 3.6)
-                    is_braking = 1 if accel < -1.5 else 0
-                    abs_flag = 1 if accel < -4.0 else 0
+                if len(bsm_entries) < seq_len:
+                    continue
 
-                    bsm_tokens = tokenizer.encode_bsm(speed_kmh, accel, heading, pos_x, pos_y, brake=is_braking, abs_flag=abs_flag)
-                    msg_list.append(bsm_tokens)
+                # Group into consecutive sliding window sequences of length seq_len
+                for start_idx in range(0, len(bsm_entries) - seq_len + 1, seq_len):
+                    window = bsm_entries[start_idx : start_idx + seq_len]
+                    msg_token_list = []
+                    prev_speed = 0.0
 
-                    # Update physics
-                    v0 = max(0.0, min(50.0, v0 + accel * dt))
-                    pos_x += v0 * math.cos(math.radians(heading)) * dt
-                    pos_y += v0 * math.sin(math.radians(heading)) * dt
+                    for step, msg in enumerate(window):
+                        pos = msg.get("pos", [0.0, 0.0, 0.0])
+                        spd = msg.get("spd", [0.0, 0.0, 0.0])
 
-                seq_tokens, seq_mask = tokenizer.encode_sequence(msg_list, max_len=window_tokens)
-                sequences.append(seq_tokens.numpy())
-                masks.append(seq_mask.numpy())
-                labels.append(is_attack)
-                attack_types.append(atk_type)
-                sender_ids.append(sender_id)
-                scenario_ids.append(sc_name)
+                        # Compute Euclidean speed & kinematics
+                        vx, vy = spd[0], spd[1]
+                        speed_mps = math.sqrt(vx * vx + vy * vy)
+                        speed_kmh = max(0.0, min(180.0, speed_mps * 3.6))
 
-    return (
-        np.array(sequences),
-        np.array(masks),
-        np.array(labels),
-        attack_types,
-        sender_ids,
-        scenario_ids
+                        # Heading
+                        heading_deg = (math.atan2(vy, vx) * 180.0 / math.pi) % 360.0
+
+                        # Acceleration estimate (dt = 0.1s standard BSM period)
+                        accel_mps2 = (speed_mps - prev_speed) / 0.1 if step > 0 else 0.0
+                        accel_mps2 = max(-12.0, min(8.0, accel_mps2))
+                        prev_speed = speed_mps
+
+                        is_braking = 1 if accel_mps2 < -1.5 else 0
+                        abs_active = 1 if accel_mps2 < -4.0 else 0
+
+                        # Positional offset relative to reference origin
+                        dx = float(pos[0]) % 500.0 - 250.0
+                        dy = float(pos[1]) % 500.0 - 250.0
+
+                        bsm_tokens = tokenizer.encode_bsm(
+                            speed=speed_kmh,
+                            accel=accel_mps2,
+                            heading=heading_deg,
+                            dx=dx,
+                            dy=dy,
+                            brake=is_braking,
+                            abs_flag=abs_active
+                        )
+                        msg_token_list.append(bsm_tokens)
+
+                    seq_ids, seq_mask = tokenizer.encode_sequence(msg_token_list, max_len=window_tokens)
+
+                    sequences.append(seq_ids.numpy())
+                    masks.append(seq_mask.numpy())
+                    labels.append(is_attack)
+                    attack_types.append(atk_name)
+                    sender_ids.append(sender_global_id)
+                    scenario_ids.append(scenario_id)
+
+    sequences = np.array(sequences)
+    masks = np.array(masks)
+    labels = np.array(labels)
+
+    print(f"[VeReMi Loader] Successfully parsed {len(sequences):,} real sequences from {len(selected_archives)} archives.")
+    print(f"[VeReMi Loader] Real Class Balance: Benign = {np.sum(labels == 0):,} ({np.mean(labels == 0)*100:.1f}%) | Attacks = {np.sum(labels == 1):,} ({np.mean(labels == 1)*100:.1f}%)")
+
+    # Cache to disk for instant loading
+    os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+    np.savez_compressed(
+        cache_path,
+        sequences=sequences,
+        masks=masks,
+        labels=labels,
+        attack_types=np.array(attack_types),
+        sender_ids=np.array(sender_ids),
+        scenario_ids=np.array(scenario_ids)
     )
+    print(f"[VeReMi Loader] Saved compressed cache to {cache_path}")
+
+    return sequences, masks, labels, attack_types, sender_ids, scenario_ids
 
 
 def split_by_sender_disjoint(full_dataset: V2XDataset, test_ratio: float = 0.20, seed: int = 42):
     """
-    Partitions the dataset strictly by Sender StationID / Pseudonym.
+    Partitions the dataset strictly by Sender StationID / Vehicle Pseudonym.
     Guarantees that test senders never appeared in the training set (Zero Transmitter Leakage).
     """
     unique_senders = np.array(sorted(list(set(full_dataset.sender_ids))))
@@ -175,21 +247,28 @@ def split_by_sender_disjoint(full_dataset: V2XDataset, test_ratio: float = 0.20,
         max_len=full_dataset.max_len
     )
 
-    verify_sender_disjoint_split(train_ds, test_ds)
+    # Formal mathematical verification
+    overlap = len(set(train_ds.sender_ids).intersection(set(test_ds.sender_ids)))
+    assert overlap == 0, f"FATAL DATA LEAKAGE: {overlap} senders found in both train and test!"
+
     return train_ds, test_ds
 
 
-def split_by_scenario_disjoint(full_dataset: V2XDataset, test_scenarios: set = None):
+def split_by_scenario_disjoint(full_dataset: V2XDataset, test_ratio: float = 0.20, seed: int = 42):
     """
-    Partitions the dataset strictly by discrete Simulation Scenario.
-    Guarantees that test scenarios never appeared in the training set.
+    Partitions the dataset strictly by Simulation Scenario ID.
+    Guarantees that test simulation runs never appeared in the training set (Zero Scenario Leakage).
     """
-    if test_scenarios is None:
-        unique_scenarios = sorted(list(set(full_dataset.scenario_ids)))
-        test_scenarios = set(unique_scenarios[-2:])  # Default last 2 scenarios
+    unique_scenarios = np.array(sorted(list(set(full_dataset.scenario_ids))))
+    np.random.seed(seed)
+    np.random.shuffle(unique_scenarios)
 
-    train_idx = [i for i, sc in enumerate(full_dataset.scenario_ids) if sc not in test_scenarios]
-    test_idx = [i for i, sc in enumerate(full_dataset.scenario_ids) if sc in test_scenarios]
+    n_test_scenarios = max(1, int(len(unique_scenarios) * test_ratio))
+    test_scenarios_set = set(unique_scenarios[:n_test_scenarios])
+    train_scenarios_set = set(unique_scenarios[n_test_scenarios:])
+
+    train_idx = [i for i, sc in enumerate(full_dataset.scenario_ids) if sc in train_scenarios_set]
+    test_idx = [i for i, sc in enumerate(full_dataset.scenario_ids) if sc in test_scenarios_set]
 
     train_ds = V2XDataset(
         full_dataset.sequences[train_idx].numpy(),
@@ -211,84 +290,8 @@ def split_by_scenario_disjoint(full_dataset: V2XDataset, test_scenarios: set = N
         max_len=full_dataset.max_len
     )
 
-    verify_scenario_disjoint_split(train_ds, test_ds)
+    overlap_sc = len(set(train_ds.scenario_ids).intersection(set(test_ds.scenario_ids)))
+    overlap_snd = len(set(train_ds.sender_ids).intersection(set(test_ds.sender_ids)))
+    assert overlap_sc == 0, f"FATAL DATA LEAKAGE: {overlap_sc} scenarios in both train and test!"
+
     return train_ds, test_ds
-
-
-def verify_sender_disjoint_split(train_dataset: V2XDataset, test_dataset: V2XDataset):
-    """
-    Formally verifies that Train and Test partitions share zero Sender IDs.
-    Raises AssertionError if any transmitter leakage is detected.
-    """
-    train_senders = set(train_dataset.sender_ids)
-    test_senders = set(test_dataset.sender_ids)
-    overlap = train_senders.intersection(test_senders)
-
-    if len(overlap) > 0:
-        raise AssertionError(f"[SENDER LEAKAGE DETECTED] Shared Sender IDs between train and test: {overlap}")
-
-    print("\n" + "="*75)
-    print("   FORMAL SENDER-DISJOINT VERIFICATION: PASSED (ZERO TRANSMITTER LEAKAGE)")
-    print(f"   Train Senders ({len(train_senders)}) | Test Senders ({len(test_senders)}) | Overlap: {len(overlap)}")
-    print("="*75 + "\n")
-
-
-def verify_scenario_disjoint_split(train_dataset: V2XDataset, test_dataset: V2XDataset):
-    """
-    Formally verifies that Train and Test partitions share zero Scenarios and zero Senders.
-    """
-    train_scenarios = set(train_dataset.scenario_ids)
-    test_scenarios = set(test_dataset.scenario_ids)
-    sc_overlap = train_scenarios.intersection(test_scenarios)
-
-    train_senders = set(train_dataset.sender_ids)
-    test_senders = set(test_dataset.sender_ids)
-    sender_overlap = train_senders.intersection(test_senders)
-
-    if len(sc_overlap) > 0:
-        raise AssertionError(f"[SCENARIO LEAKAGE DETECTED] Shared scenarios: {sc_overlap}")
-    if len(sender_overlap) > 0:
-        raise AssertionError(f"[SENDER LEAKAGE DETECTED] Shared senders: {sender_overlap}")
-
-    print("\n" + "="*75)
-    print("   FORMAL SCENARIO-DISJOINT VERIFICATION: PASSED (ZERO SCENARIO LEAKAGE)")
-    print(f"   Train Scenarios ({len(train_scenarios)}) | Test Scenarios ({len(test_scenarios)}) | Overlap: {len(sc_overlap)}")
-    print(f"   Sender Overlap: {len(sender_overlap)}")
-    print("="*75 + "\n")
-
-
-def load_veremi_standards_dataset(
-    zip_path=r"D:\DR Salam\archive (21).zip",
-    max_samples=5000,
-    seq_len=5,
-    window_tokens=64,
-    split_mode="scenario_disjoint",
-    test_ratio=0.20
-):
-    """
-    Loads multi-scenario V2X data and partitions using either 'sender_disjoint' or 'scenario_disjoint'.
-    """
-    total_scenarios = 10
-    seq_per_scenario = max(50, max_samples // total_scenarios)
-
-    seqs, masks, labels, atk_types, senders, scenarios = generate_benchmark_corpus(
-        num_scenarios=total_scenarios,
-        sequences_per_scenario=seq_per_scenario,
-        seq_len=seq_len,
-        window_tokens=window_tokens
-    )
-
-    full_ds = V2XDataset(
-        seqs,
-        masks,
-        labels,
-        atk_types,
-        senders,
-        scenarios,
-        max_len=window_tokens
-    )
-
-    if split_mode == "sender_disjoint":
-        return split_by_sender_disjoint(full_ds, test_ratio=test_ratio)
-    else:
-        return split_by_scenario_disjoint(full_ds)

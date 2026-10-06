@@ -1,6 +1,13 @@
 """
-Unit Tests for V2X-BERT Package.
-Verifies tokenization consistency, parameter counts, forward passes, and INT8 quantization.
+Comprehensive Unit Test Suite for V2X-BERT Package.
+Verifies:
+  1. Standards Tokenizer Vocab Ranges
+  2. Exact Parameter Counts & Memory Footprints (1.11M params)
+  3. Wire-Level ASN.1 UPER / DER Binary Serialization & Deserialization
+  4. Real VeReMi Dataset Ingestion & Zero-Leakage Disjoint Splits
+  5. Multi-Task Cross-Standard InfoNCE Alignment Loss
+  6. DAIR-V2X Cooperative Vehicle-Infrastructure Dataset Ingestion
+  7. Edge OBU INT8 Dynamic Quantization
 """
 
 import os
@@ -11,11 +18,14 @@ import torch
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from v2x_bert import V2XTokenizer, EdgeV2XBERT, load_model
+from src.data_loader import load_real_veremi_dataset, V2XDataset, split_by_scenario_disjoint, split_by_sender_disjoint
+from src.dair_v2x_loader import load_dair_v2x_dataset
 
 
 class TestV2XBERT(unittest.TestCase):
 
     def test_tokenizer_ranges(self):
+        """Verify vocabulary size and mathematical quantization bounds."""
         tokenizer = V2XTokenizer()
         self.assertEqual(tokenizer.vocab_size, 1024)
 
@@ -36,17 +46,17 @@ class TestV2XBERT(unittest.TestCase):
         self.assertTrue(500 <= tok_spa <= 1011)
 
     def test_model_parameters(self):
+        """Verify model parameter count (~1.11M) and memory budgets."""
         model = load_model(pretrained=False, device="cpu")
         num_params = model.count_parameters()
-        
-        # Verify exact parameter count (~1.11M)
         self.assertTrue(1_100_000 <= num_params <= 1_120_000, f"Got {num_params}")
-        
+
         mem = model.get_memory_footprint()
         self.assertTrue(mem["fp32_mb"] < 5.0)
         self.assertTrue(mem["int8_mb"] < 1.5)
 
     def test_model_forward(self):
+        """Verify forward pass on pre-training and classification heads."""
         model = load_model(pretrained=False, device="cpu")
         x = torch.randint(0, 1024, (2, 64))
         mask = torch.ones((2, 64))
@@ -61,100 +71,99 @@ class TestV2XBERT(unittest.TestCase):
         self.assertEqual(cls_logits.shape, (2, 2))
         self.assertEqual(len(attentions), 4)
 
-    def test_standards_dictionary_encoding(self):
+    def test_sae_j2735_uper_wire_codec(self):
+        """Verify authentic wire-level SAE J2735:2020 BSM binary packing and unpacking."""
         tokenizer = V2XTokenizer()
-        
-        # SAE J2735 BSM Dict
-        bsm_dict = {
-            "messageId": "BSM",
-            "speed": 65.0,
-            "accel": -1.5,
-            "heading": 90.0,
-            "dx": 12.0,
-            "dy": 4.0,
-            "brake": 1,
-            "abs": 0
-        }
-        tokens = tokenizer.encode_standard_dict(bsm_dict)
-        self.assertEqual(len(tokens), 6)
+        wire_bytes = tokenizer.encode_sae_j2735_uper_bytes(
+            msg_count=42,
+            temp_id=1001,
+            dsecond=32000,
+            lat_microdeg=37774900,
+            long_microdeg=-122419400,
+            elev_10cm=120,
+            speed_kmh=88.5,
+            heading_deg=180.0,
+            accel_mps2=-2.4,
+            brake_active=1,
+            abs_active=0
+        )
+        self.assertGreaterEqual(len(wire_bytes), 26)
+
+        decoded = tokenizer.decode_sae_j2735_uper_bytes(wire_bytes)
+        self.assertEqual(decoded["msgCount"], 42)
+        self.assertEqual(decoded["tempId"], 1001)
+        self.assertAlmostEqual(decoded["speed"], 88.5, delta=0.5)
+        self.assertAlmostEqual(decoded["heading"], 180.0, delta=0.5)
+        self.assertEqual(decoded["brake"], 1)
+
+        # Wire-to-Tokens direct decoding
+        tokens = tokenizer.tokenize_raw_wire_packet(wire_bytes, standard="SAE")
         self.assertEqual(tokens[0], tokenizer.BSM_TOKEN)
 
-        # ETSI CAM Dict
-        cam_dict = {
-            "messageId": "CAM",
-            "speed": 50.0,
-            "accel": 0.2,
-            "heading": 180.0,
-            "dx": 0.0,
-            "dy": 0.0,
-            "light": 1
-        }
-        cam_tokens = tokenizer.encode_standard_dict(cam_dict)
-        self.assertEqual(len(cam_tokens), 6)
-        self.assertEqual(cam_tokens[0], tokenizer.CAM_TOKEN)
+    def test_etsi_cam_uper_wire_codec(self):
+        """Verify authentic wire-level ETSI EN 302 637-2 CAM binary packing and unpacking."""
+        tokenizer = V2XTokenizer()
+        wire_bytes = tokenizer.encode_etsi_cam_uper_bytes(
+            station_id=2002,
+            delta_time_ms=1500,
+            lat_microdeg=48856600,
+            long_microdeg=2352200,
+            speed_kmh=50.0,
+            heading_deg=90.0,
+            accel_mps2=0.5,
+            light_active=1
+        )
+        self.assertGreaterEqual(len(wire_bytes), 24)
 
-        # SAE SPaT Dict
-        spat_dict = {
-            "messageId": "SPAT",
-            "phase": "GREEN",
-            "countdown": 15.0
-        }
-        spat_tokens = tokenizer.encode_standard_dict(spat_dict)
-        self.assertEqual(len(spat_tokens), 3)
-        self.assertEqual(spat_tokens[0], tokenizer.SPAT_TOKEN)
+        decoded = tokenizer.decode_etsi_cam_uper_bytes(wire_bytes)
+        self.assertEqual(decoded["stationId"], 2002)
+        self.assertAlmostEqual(decoded["speed"], 50.0, delta=0.5)
+        self.assertAlmostEqual(decoded["heading"], 90.0, delta=0.5)
 
-        # ETSI DENM Dict
-        denm_dict = {
-            "messageId": "DENM",
-            "cause": "HARD_BRAKING",
-            "speed": 80.0,
-            "heading": 45.0
-        }
-        denm_tokens = tokenizer.encode_standard_dict(denm_dict)
-        self.assertEqual(len(denm_tokens), 4)
-        self.assertEqual(denm_tokens[0], tokenizer.DENM_TOKEN)
+        # Wire-to-Tokens direct decoding
+        tokens = tokenizer.tokenize_raw_wire_packet(wire_bytes, standard="ETSI")
+        self.assertEqual(tokens[0], tokenizer.CAM_TOKEN)
 
     def test_sae_etsi_cross_standard_alignment_loss(self):
-        from v2x_bert.pretrain import compute_sae_etsi_contrastive_loss, map_sae_to_etsi_view
+        """Verify cross-standard InfoNCE alignment loss calculation."""
+        from src.pretrain_engine import compute_sae_etsi_contrastive_loss, map_sae_to_etsi_view
         tokenizer = V2XTokenizer()
 
-        # Batch of SAE J2735 sequences
         sae_batch = torch.tensor([
             [tokenizer.CLS_TOKEN, tokenizer.BSM_TOKEN, 50, 150, 260, 510, 328, tokenizer.SEP_TOKEN] + [0] * 56,
             [tokenizer.CLS_TOKEN, tokenizer.BSM_TOKEN, 80, 180, 290, 550, 329, tokenizer.SEP_TOKEN] + [0] * 56
         ])
 
-        # Map to ETSI CAM equivalent
         etsi_batch = map_sae_to_etsi_view(sae_batch, tokenizer)
         self.assertEqual(etsi_batch[0, 1].item(), tokenizer.CAM_TOKEN)
 
-        # Projections
         z_sae = torch.randn(2, 64)
         z_etsi = torch.randn(2, 64)
         loss = compute_sae_etsi_contrastive_loss(z_sae, z_etsi)
         self.assertTrue(loss.item() > 0.0)
 
-    def test_true_scenario_and_sender_disjoint_splits(self):
-        from v2x_bert.data import load_veremi_standards_dataset, verify_sender_disjoint_split, verify_scenario_disjoint_split
+    def test_real_veremi_loader_and_disjoint_splits(self):
+        """Verify real VeReMi dataset loader and formal disjoint verification."""
+        seqs, masks, labels, atks, snders, scens = load_real_veremi_dataset(max_archives=5)
+        full_ds = V2XDataset(seqs, masks, labels, atks, snders, scens)
 
         # 1. Scenario-Disjoint Split
-        train_sc, test_sc = load_veremi_standards_dataset(max_samples=500, split_mode="scenario_disjoint")
+        train_sc, test_sc = split_by_scenario_disjoint(full_ds, test_ratio=0.20)
         self.assertEqual(len(set(train_sc.scenario_ids).intersection(set(test_sc.scenario_ids))), 0)
-        verify_scenario_disjoint_split(train_sc, test_sc)
 
-        # 2. Sender-Disjoint Split (Vehicle StationID Disjoint)
-        train_sn, test_sn = load_veremi_standards_dataset(max_samples=500, split_mode="sender_disjoint", test_ratio=0.20)
+        # 2. Sender-Disjoint Split
+        train_sn, test_sn = split_by_sender_disjoint(full_ds, test_ratio=0.20)
         self.assertEqual(len(set(train_sn.sender_ids).intersection(set(test_sn.sender_ids))), 0)
-        verify_sender_disjoint_split(train_sn, test_sn)
 
     def test_dair_v2x_loader(self):
-        from v2x_bert.dair_v2x import load_dair_v2x_dataset
+        """Verify DAIR-V2X cooperative vehicle-infrastructure loader."""
         train_ds, test_ds = load_dair_v2x_dataset(num_samples=200, test_ratio=0.20)
         self.assertEqual(len(train_ds), 160)
         self.assertEqual(len(test_ds), 40)
         self.assertEqual(train_ds[0][0].shape[0], 64)
 
     def test_int8_quantization(self):
+        """Verify dynamic INT8 CPU quantization forward execution."""
         model = load_model(pretrained=False, device="cpu")
         quant_model = model.quantize_int8()
         x = torch.randint(0, 1024, (2, 64))

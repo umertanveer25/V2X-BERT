@@ -5,7 +5,7 @@
 [![Standards: SAE J2735 & ETSI](https://img.shields.io/badge/Standards-SAE%20J2735%20%7C%20ETSI%20CAM%2FDENM-green.svg)](https://www.sae.org/)
 [![Parameters: 1.11M](https://img.shields.io/badge/Parameters-1.11M%20(Edge--Native)-orange.svg)](https://github.com/umertanveer25/V2X-BERT)
 [![Memory FP32/INT8](https://img.shields.io/badge/Memory-4.43MB%20%2F%201.11MB%20(Quantized)-purple.svg)](https://github.com/umertanveer25/V2X-BERT)
-[![Tests: 8/8 Passed](https://img.shields.io/badge/Tests-8%2F8%20Passed%20(100%25)-brightgreen.svg)](tests/)
+[![Tests: 9/9 Passed](https://img.shields.io/badge/Tests-9%2F9%20Passed%20(100%25)-brightgreen.svg)](tests/)
 
 ---
 
@@ -169,9 +169,9 @@ cd V2X-BERT
 pip install -e .
 ```
 
-### Option 2: Run Unit Test Suite (8/8 Tests Passing)
+### Option 2: Run Unit Test Suite (9/9 Tests Passing)
 ```bash
-python -m unittest discover tests/
+python tests/test_v2x_bert.py
 ```
 
 ### Option 3: Run Full Pre-Training & Downstream Pipeline
@@ -246,7 +246,7 @@ V2X-BERT/
 │   ├── run_dair_v2x_experiment.py         # Executes DAIR-V2X cooperative benchmark
 │   └── generate_v2x_bert_figures.py       # Generates Figures 1 - 6 (300 DPI)
 ├── tests/                                 # Unit & Integration Test Suite
-│   └── test_v2x_bert.py                   # 8 unit tests (zero-leakage, tokenization, quantization)
+│   └── test_v2x_bert.py                   # 9 unit tests (zero-leakage, wire codecs, quantization)
 └── results/                               # Master CSV Tables, JSONs, & Figures
     ├── Table1_V2X_BERT_Benchmark_Comparison.csv
     ├── Table2_DAIR_V2X_Cooperative_Benchmark.csv

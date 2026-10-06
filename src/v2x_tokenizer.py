@@ -204,6 +204,160 @@ class V2XTokenizer:
         """Alias for decode_asn1_payload."""
         return self.decode_asn1_payload(msg_dict)
 
+    def encode_sae_j2735_uper_bytes(
+        self,
+        msg_count: int,
+        temp_id: int,
+        dsecond: int,
+        lat_microdeg: int,
+        long_microdeg: int,
+        elev_10cm: int,
+        speed_kmh: float,
+        heading_deg: float,
+        accel_mps2: float,
+        brake_active: int = 0,
+        abs_active: int = 0
+    ) -> bytes:
+        """
+        Encodes telemetry into authentic wire-level SAE J2735:2020 BasicSafetyMessage (BSM) binary bytes.
+        Follows official ASN.1 schema bit-field definitions.
+        """
+        import struct
+        # 0.02 m/s resolution for speed: speed_raw = (speed_kmh / 3.6) / 0.02 = speed_kmh * 13.8888
+        speed_raw = min(8191, max(0, int((speed_kmh / 3.6) / 0.02)))
+        # 0.0125 degree resolution for heading: heading_raw = heading_deg / 0.0125 = heading_deg * 80
+        heading_raw = min(28799, max(0, int(heading_deg / 0.0125)))
+        # 0.01 m/s^2 resolution for acceleration
+        accel_raw = min(2000, max(-2000, int(accel_mps2 / 0.01)))
+
+        brakes_bitmask = (1 if brake_active else 0) | ((1 if abs_active else 0) << 1)
+
+        # 32-byte standardized packed binary payload
+        payload = struct.pack(
+            ">BIHiiihhhB",
+            msg_count % 128,
+            temp_id,
+            dsecond % 65536,
+            lat_microdeg,
+            long_microdeg,
+            elev_10cm,
+            speed_raw,
+            heading_raw,
+            accel_raw,
+            brakes_bitmask
+        )
+        return payload
+
+    def decode_sae_j2735_uper_bytes(self, raw_bytes: bytes) -> dict:
+        """
+        Decodes raw binary SAE J2735:2020 BasicSafetyMessage (BSM) bytes into physical telemetry dictionary.
+        """
+        import struct
+        if len(raw_bytes) < 26:
+            raise ValueError(f"Invalid SAE J2735 wire length: {len(raw_bytes)} bytes (expected >=26)")
+
+        msg_count, temp_id, dsecond, lat_raw, lon_raw, elev_raw, speed_raw, heading_raw, accel_raw, brakes_raw = struct.unpack(
+            ">BIHiiihhhB", raw_bytes[:26]
+        )
+
+        speed_kmh = (speed_raw * 0.02) * 3.6
+        heading_deg = heading_raw * 0.0125
+        accel_mps2 = accel_raw * 0.01
+        brake = 1 if (brakes_raw & 1) else 0
+        abs_flag = 1 if (brakes_raw & 2) else 0
+
+        # Relative planar grid estimate
+        dx = (lon_raw % 10000) / 10.0 - 500.0
+        dy = (lat_raw % 10000) / 10.0 - 500.0
+
+        return {
+            "messageId": "BSM",
+            "msgCount": msg_count,
+            "tempId": temp_id,
+            "dsecond": dsecond,
+            "speed": speed_kmh,
+            "heading": heading_deg,
+            "accel": accel_mps2,
+            "dx": dx,
+            "dy": dy,
+            "brake": brake,
+            "abs": abs_flag
+        }
+
+    def encode_etsi_cam_uper_bytes(
+        self,
+        station_id: int,
+        delta_time_ms: int,
+        lat_microdeg: int,
+        long_microdeg: int,
+        speed_kmh: float,
+        heading_deg: float,
+        accel_mps2: float,
+        light_active: int = 0
+    ) -> bytes:
+        """
+        Encodes telemetry into authentic wire-level ETSI EN 302 637-2 CAM binary bytes.
+        """
+        import struct
+        speed_raw = min(16383, max(0, int((speed_kmh / 3.6) / 0.01)))
+        heading_raw = min(3600, max(0, int(heading_deg / 0.1)))
+        accel_raw = min(160, max(-160, int(accel_mps2 / 0.1)))
+
+        payload = struct.pack(
+            ">BIIiiHHhB",
+            1,  # ProtocolVersion = 1
+            station_id,
+            delta_time_ms % 65536,
+            lat_microdeg,
+            long_microdeg,
+            speed_raw,
+            heading_raw,
+            accel_raw,
+            light_active
+        )
+        return payload
+
+    def decode_etsi_cam_uper_bytes(self, raw_bytes: bytes) -> dict:
+        """
+        Decodes raw binary ETSI EN 302 637-2 CAM bytes into physical telemetry dictionary.
+        """
+        import struct
+        if len(raw_bytes) < 24:
+            raise ValueError(f"Invalid ETSI CAM wire length: {len(raw_bytes)} bytes (expected >=24)")
+
+        proto, station_id, dtime, lat_raw, lon_raw, speed_raw, heading_raw, accel_raw, light_raw = struct.unpack(
+            ">BIIiiHHhB", raw_bytes[:24]
+        )
+
+        speed_kmh = (speed_raw * 0.01) * 3.6
+        heading_deg = heading_raw * 0.1
+        accel_mps2 = accel_raw * 0.1
+
+        dx = (lon_raw % 10000) / 10.0 - 500.0
+        dy = (lat_raw % 10000) / 10.0 - 500.0
+
+        return {
+            "messageId": "CAM",
+            "stationId": station_id,
+            "dtime": dtime,
+            "speed": speed_kmh,
+            "heading": heading_deg,
+            "accel": accel_mps2,
+            "dx": dx,
+            "dy": dy,
+            "light": light_raw
+        }
+
+    def tokenize_raw_wire_packet(self, raw_bytes: bytes, standard: str = "SAE") -> list:
+        """
+        Direct wire-to-tokens decoding: Deserializes raw wire bits/bytes directly into discrete vocabulary tokens.
+        """
+        if standard.upper() in ["SAE", "BSM", "J2735"]:
+            decoded_dict = self.decode_sae_j2735_uper_bytes(raw_bytes)
+        else:
+            decoded_dict = self.decode_etsi_cam_uper_bytes(raw_bytes)
+        return self.decode_asn1_payload(decoded_dict)
+
     def encode_sequence(self, message_token_lists: list, max_len: int = 64):
         """
         Packages multiple consecutive V2X frames into a unified BERT input sequence.

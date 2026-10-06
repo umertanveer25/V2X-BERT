@@ -20,6 +20,7 @@ __all__ = [
     "mask_telemetry_tokens",
     "fine_tune_and_evaluate",
     "load_veremi_standards_dataset",
+    "load_real_veremi_dataset",
     "V2XDataset",
 ]
 
