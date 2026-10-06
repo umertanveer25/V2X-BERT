@@ -247,9 +247,6 @@ V2X-BERT/
 │   └── generate_v2x_bert_figures.py       # Generates Figures 1 - 6 (300 DPI)
 ├── tests/                                 # Unit & Integration Test Suite
 │   └── test_v2x_bert.py                   # 8 unit tests (zero-leakage, tokenization, quantization)
-├── paper/                                 # IEEE Transactions LaTeX Manuscript
-│   ├── bare_jrnl_new_sample4.tex
-│   └── references.bib
 └── results/                               # Master CSV Tables, JSONs, & Figures
     ├── Table1_V2X_BERT_Benchmark_Comparison.csv
     ├── Table2_DAIR_V2X_Cooperative_Benchmark.csv
